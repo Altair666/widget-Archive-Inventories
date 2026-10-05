@@ -178,13 +178,15 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.1.4</footer>
+<footer class="ver-footer">v0.1.5</footer>
 
 <script>
 'use strict';
 
-// Целевая таблица виджета — Inventory_of_Documents (колонки Number:Int,
-// IssueDate:Date, Destination:Text). Список фирм для «Места отправки» берётся
+// Целевая таблица виджета — Inventory_of_Documents. Number — ФОРМУЛЬНАЯ колонка
+// в Grist (порядок по id внутри года IssueDate, как Components.serial), виджет её
+// никогда не пишет; IssueDate:Date (по умолчанию TODAY() при добавлении),
+// Destination:Choice. Список фирм для «Места отправки» берётся
 // из Tu_accounting.client_text — эту таблицу ТОЛЬКО читаем (она синхронизируется
 // вебхуками с внешней системой, писать в неё нельзя).
 var FIRMS_TABLE_CANDIDATES = ['Tu_accounting', 'tu_accounting'];
@@ -448,16 +450,16 @@ function dateToYear(v) {
 
 // ---------- Numbering: порядковый номер в году ----------
 
-function computeNextNumber(year, excludeId) {
+// Повторяет формулу колонки Number: 1 + число записей того же года с меньшим id.
+// Без id — превью для новой записи (её id будет больше всех существующих).
+function computeNextNumber(year, id) {
   if (!year) return null;
-  var max = 0;
+  var n = 0;
   state.records.forEach(function (r) {
-    if (r.id === excludeId) return;
-    if (dateToYear(r.IssueDate) !== year) return;
-    var n = parseInt(r.Number, 10);
-    if (!isNaN(n) && n > max) max = n;
+    if (id != null && r.id >= id) return;
+    if (dateToYear(r.IssueDate) === year) n++;
   });
-  return max + 1;
+  return n + 1;
 }
 
 function currentFormYear() {
@@ -493,7 +495,6 @@ btnRegister.addEventListener('click', function () {
   var dest = formFirmCombo.getValue();
   if (!year || !dest) return;
   var fields = {
-    Number: computeNextNumber(year),
     IssueDate: inputValueToDate(fDate.value),
     Destination: dest
   };
@@ -651,9 +652,7 @@ function renderRegistry() {
 function editableRow(r) {
   var frag = document.createDocumentFragment();
 
-  // № — счётчик, вручную не редактируется (как serial в widget-espdnumber):
-  // пока год даты прежний — номер сохраняется, при переносе в другой год
-  // становится следующим свободным номером того года.
+  // № — формульная колонка Grist, здесь только превью того, что она посчитает.
   var origYear = dateToYear(r.IssueDate);
   var numValue = r.Number != null ? r.Number : null;
   var tdNum = document.createElement('td');
@@ -693,7 +692,6 @@ function editableRow(r) {
     var dest = destValue || (normFirm(combo.input.value) === normFirm(r.Destination) ? r.Destination : '');
     if (!dest) { window.alert('Выберите место отправки из списка.'); return; }
     var fields = {
-      Number: numValue,
       IssueDate: inputValueToDate(inDate.value),
       Destination: dest
     };
