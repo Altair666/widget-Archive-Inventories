@@ -183,7 +183,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.1.0</footer>
+<footer class="ver-footer">v0.1.1</footer>
 
 <script>
 'use strict';
@@ -193,12 +193,15 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 // из Tu_accounting.client_text — эту таблицу ТОЛЬКО читаем (она синхронизируется
 // вебхуками с внешней системой, писать в неё нельзя).
 var FIRMS_TABLE_CANDIDATES = ['Tu_accounting', 'tu_accounting'];
+var TARGET_TABLE_ID = 'Inventory_of_Documents';
 
 var state = {
   records: [],
   recordsLoaded: false,
   firms: [],            // уникальные client_text, отсортированы
   firmsLoaded: false,
+  boundTableId: null,   // таблица, к которой привязан виджет (Select data)
+  wrongTable: false,    // true — привязан не к Inventory_of_Documents, регистрация заблокирована
   regYearFilter: null,  // число года или null («Все»)
   editingId: null
 };
@@ -216,6 +219,10 @@ function pluralizeRu(n, one, few, many) {
 }
 
 function updateConnLabel() {
+  if (state.wrongTable) {
+    setConn(false, 'Виджет привязан к таблице «' + state.boundTableId + '» — выберите ' + TARGET_TABLE_ID + ' в «Select data»');
+    return;
+  }
   var total = state.records.length;
   setConn(true, total + ' ' + pluralizeRu(total, 'опись', 'описи', 'описей'));
 }
@@ -229,9 +236,24 @@ function showError(err) {
 
 grist.ready({ requiredAccess: 'full' });
 
+// Колонки пишутся напрямую по colId, поэтому привязка к чужой таблице даёт
+// «Invalid column …» при создании строки — проверяем заранее и блокируем форму.
+function checkBoundTable() {
+  if (!grist.selectedTable || !grist.selectedTable.getTableId) return;
+  grist.selectedTable.getTableId().then(function (tableId) {
+    state.boundTableId = tableId;
+    state.wrongTable = !!tableId && tableId !== TARGET_TABLE_ID;
+    updateConnLabel();
+    syncRegisterBtn();
+    renderRegistry();
+  }).catch(function (err) { console.error('Не удалось определить привязанную таблицу', err); });
+}
+checkBoundTable();
+
 grist.onRecords(function (records) {
   state.recordsLoaded = true;
   state.records = records;
+  checkBoundTable();
   updateConnLabel();
   updateNumberPreview();
   syncRegisterBtn();
@@ -452,7 +474,7 @@ formFirmCombo.refresh();
 var btnRegister = document.getElementById('btnRegister');
 var registering = false;
 function syncRegisterBtn() {
-  btnRegister.disabled = registering || !state.recordsLoaded || !fDate.value || !formFirmCombo.getValue();
+  btnRegister.disabled = registering || state.wrongTable || !state.recordsLoaded || !fDate.value || !formFirmCombo.getValue();
 }
 
 btnRegister.addEventListener('click', function () {
@@ -546,6 +568,12 @@ var regCount = document.getElementById('regCount');
 var regFilterInput = document.getElementById('regFilterInput');
 
 function renderRegistry() {
+  if (state.wrongTable) {
+    regCount.textContent = '';
+    regBody.innerHTML = '<div class="reg-empty" style="color:var(--red)">Виджет привязан к таблице «' + state.boundTableId +
+      '». В настройках виджета (Select data) выберите таблицу ' + TARGET_TABLE_ID + '.</div>';
+    return;
+  }
   regCount.textContent = state.records.length;
   var q = (regFilterInput.value || '').trim().toLowerCase();
   var rows = state.records.slice().sort(function (a, b) {
