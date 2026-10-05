@@ -1,0 +1,17 @@
+{
+  "name": "@gristlabs/widget-archive-inventories",
+  "description": "Реестр описей документации, отправляемой в архив",
+  "homePage": "https://github.com/Altair666/widget-Archive-Inventories",
+  "version": "0.1.0",
+  "grist": {
+    "name": "Archive inventories",
+    "url": "https://altair666.github.io/widget-Archive-Inventories/index.html",
+    "widgetId": "@gristlabs/widget-archive-inventories",
+    "published": true,
+    "accessLevel": "full",
+    "renderAfterReady": true,
+    "description": "Реестр описей документации для отправки в архив",
+    "authors": [{"name": "Altair666", "url": "https://github.com/Altair666"}],
+    "isGristLabsMaintained": false
+  }
+}

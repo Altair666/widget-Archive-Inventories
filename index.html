@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Описи документов в архив</title>
+<script src="https://db.mp-lab.ru/grist-plugin-api.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f7f7f7;--surf:#FFF;--surf2:#f7f7f7;--surf3:#e5e5e5;
+  --brd:#DEDAD2;--brd2:#C4C0B6;
+  --tx:#18170F;--tx2:#6A6860;--tx3:#9E9C94;
+  --acc:#1E4ED8;--acc-bg:#EEF2FF;--acc-brd:#C7D2FE;
+  --grn:#0D6E4E;--grn-bg:#ECFDF5;--grn-brd:#A7F3D0;
+  --warn:#92400E;--warn-bg:#FFFBEB;--warn-brd:#FCD34D;
+  --red:#991B1B;--red-bg:#FEF2F2;--red-brd:#FECACA;
+  --red-br:#DC2626;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans',sans-serif;
+  --r:4pt;--r2:4pt;
+}
+html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;color:var(--tx);background:var(--bg)}
+.app{height:100%;overflow:hidden;display:flex;flex-direction:column}
+.conn-dot{width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0}
+.conn-dot.ok{background:var(--grn)}
+.conn-lbl{font-size:11px;color:var(--tx3)}
+.conn-status{position:fixed;left:10px;bottom:6px;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4pt;padding:1px 7px;z-index:10}
+.ver-footer{position:fixed;right:10px;bottom:6px;font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4pt;padding:1px 7px;z-index:10}
+
+.main{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;gap:0;padding-bottom:26px}
+
+.panel{background:var(--surf);border:1px solid var(--brd);border-radius:0;flex-shrink:0}
+.panel+.panel{border-top:none}
+.ph{display:flex;align-items:center;justify-content:space-between;height:32px;padding:0 12px;border-bottom:1px solid var(--brd);background:var(--surf2)}
+.ph.reg-ph{position:sticky;top:0;z-index:5;justify-content:flex-start}
+.ph-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--tx2)}
+.pb{padding:10px 12px}
+
+.icon-btn{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:1px solid transparent;border-radius:4pt;background:transparent;color:var(--tx3);cursor:pointer;padding:0;transition:all .12s}
+.icon-btn:hover{background:var(--surf3);color:var(--tx)}
+
+.form-row{display:grid;gap:10px}
+.form-group{display:flex;flex-direction:column;gap:4px;min-width:0}
+.form-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--tx2)}
+.form-input{height:32px;border:1px solid var(--brd);border-radius:var(--r);background:#f7f7f7;padding:0 9px;font-family:inherit;font-size:12px;color:var(--tx);outline:none;transition:border-color .15s,background .15s;width:100%}
+.form-input:focus{border-color:var(--acc);background:var(--surf)}
+.form-input::placeholder{color:var(--tx3)}
+.form-input.mono{font-family:var(--mono)}
+.form-input[type="date"]{padding:0 2px 0 9px}
+.form-input.formed-num{display:flex;align-items:center;justify-content:center;text-align:center;font-family:var(--mono);background:var(--grn-bg);border-color:var(--grn-brd);color:var(--grn);font-weight:500;cursor:default;white-space:nowrap;overflow:hidden}
+.form-date-btn{width:32px;height:32px;flex-shrink:0}
+
+.btn-add{display:flex;align-items:center;justify-content:center;gap:6px;background:#16b378;color:#fff;border:none;border-radius:var(--r);padding:9px 16px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;transition:opacity .15s,transform .1s;width:100%;height:32px;white-space:nowrap}
+.btn-add:hover{opacity:.88}
+.btn-add:active{transform:scale(.98)}
+.btn-add:disabled{opacity:.35;cursor:not-allowed}
+
+/* ── Firm combobox (выбор фирмы из Tu_accounting.client_text) ── */
+.firm-combo{position:relative;width:100%}
+.firm-search{width:100%;height:32px;border:1px solid var(--brd);border-radius:var(--r);background:#f7f7f7 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239E9C94' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center;padding:0 26px 0 9px;font-family:inherit;font-size:12px;color:var(--tx);outline:none;transition:border-color .15s,background-color .15s}
+.firm-search:focus{border-color:var(--acc);background-color:var(--surf)}
+.firm-search::placeholder{color:var(--tx3)}
+.firm-search.invalid{border-color:var(--warn-brd);background-color:var(--warn-bg)}
+.firm-search.small{height:26px;font-size:11px;padding:0 24px 0 6px;background-position:right 6px center}
+.firm-dropdown{display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);max-height:220px;overflow-y:auto;z-index:30;box-shadow:0 4px 12px rgba(0,0,0,.12);text-align:left}
+.firm-dropdown.open{display:block}
+.firm-option{padding:6px 9px;font-size:12px;color:var(--tx);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.firm-option:hover,.firm-option.hl{background:var(--acc-bg);color:var(--acc)}
+.firm-option-empty{padding:6px 9px;font-size:11px;color:var(--tx2);cursor:default}
+
+#regBody{overflow-x:auto}
+.reg-table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+.reg-table th{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);padding:5px 8px;border-bottom:2px solid var(--brd);text-align:center;background:var(--surf2);white-space:nowrap}
+.reg-table td{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:middle;text-align:center}
+.reg-table tr:last-child td{border-bottom:none}
+.reg-table tr:hover td{background:var(--surf2)}
+.reg-dn{font-family:var(--mono);font-size:11px;color:var(--acc);white-space:nowrap}
+.reg-dest{text-align:left!important;word-break:break-word;overflow-wrap:anywhere}
+.reg-empty{padding:16px;text-align:center;color:var(--tx3);font-size:12px}
+.reg-filter-bar{padding:8px 12px;background:var(--surf2);border-bottom:1px solid var(--brd);display:flex;align-items:center;gap:8px;position:sticky;top:32px;z-index:4}
+.reg-filter-wrap{position:relative;flex:1}
+.reg-ph{gap:10px}
+.reg-year-wrap{display:flex;align-items:center;gap:4px;flex:1 1 auto;min-width:0;margin-left:24px}
+.reg-year-bar{display:flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.reg-year-bar::-webkit-scrollbar{display:none}
+.reg-year-chip{flex-shrink:0;font-family:var(--mono);font-size:10px;padding:2px 9px;border-radius:10px;background:var(--surf3);color:var(--tx2);cursor:pointer;border:1px solid transparent;white-space:nowrap;user-select:none;transition:all .12s}
+.reg-year-chip:hover{background:var(--brd2)}
+.reg-year-chip.active{background:var(--grn-bg);color:var(--grn);border-color:var(--grn-brd)}
+.reg-scroll-btn{border-radius:50%;border:1px solid var(--brd);background:var(--surf);color:var(--grn);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.16);transition:opacity .15s ease,visibility .15s ease}
+.reg-scroll-btn:hover{background:var(--grn-bg);border-color:var(--grn)}
+.reg-scroll-btn.hidden{opacity:0;visibility:hidden;pointer-events:none}
+.reg-year-scroll-btn{position:static;flex-shrink:0;width:18px;height:18px;transform:none}
+.reg-filter-input{width:100%;height:28px;border:1px solid var(--brd);border-radius:var(--r);padding:0 9px 0 28px;font-family:inherit;font-size:12px;background:#fff;outline:none;color:var(--tx)}
+.reg-filter-input:focus{border-color:var(--acc)}
+.reg-filter-icon{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--tx3);pointer-events:none}
+
+.reg-actions{white-space:nowrap}
+.cell-edit-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid transparent;border-radius:4pt;background:transparent;color:#E07B1F;cursor:pointer;flex-shrink:0;transition:all .1s;padding:0}
+.cell-edit-btn:hover{background:#FFF4E6;color:#C5651A;border-color:#F5D4A0}
+.cell-edit-btn:disabled{opacity:.35;cursor:not-allowed}
+.cell-edit-btn.save{color:var(--grn)}
+.cell-edit-btn.save:hover{background:var(--grn-bg);color:var(--grn);border-color:var(--grn-brd)}
+.cell-edit-btn.cancel{color:var(--red)}
+.cell-edit-btn.cancel:hover{background:var(--red-bg);color:var(--red);border-color:var(--red-brd)}
+.reg-table input.form-input{height:26px;font-size:11px}
+.tag{display:inline-flex;align-items:center;font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:4pt}
+.tag-blue{background:var(--acc-bg);color:var(--acc)}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--brd2);border-radius:4pt}
+</style>
+</head>
+<body>
+<div class="app">
+<main class="main" id="main">
+
+  <!-- REGISTRATION FORM -->
+  <div class="panel">
+    <div class="ph">
+      <span class="ph-title">Регистрация описи</span>
+    </div>
+    <div class="pb">
+      <div class="form-row" style="grid-template-columns:130px 130px minmax(180px,1fr) 32px 170px">
+        <div class="form-group">
+          <label class="form-label">№ описи</label>
+          <div class="form-input mono formed-num" id="fNum">—</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Дата выпуска</label>
+          <input class="form-input mono" type="date" id="fDate">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Место отправки</label>
+          <div id="fDestWrap"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">&nbsp;</label>
+          <button class="icon-btn form-date-btn" id="btnRefreshFirms" type="button" title="Обновить список фирм из Tu_accounting">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+        </div>
+        <div class="form-group">
+          <label class="form-label">&nbsp;</label>
+          <button class="btn-add" id="btnRegister" type="button" disabled>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Зарегистрировать
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REGISTRY -->
+  <div class="panel">
+    <div class="ph reg-ph">
+      <span class="ph-title">Реестр описей</span>
+      <div class="reg-year-wrap">
+        <button class="reg-scroll-btn reg-year-scroll-btn hidden" id="regYearScrollLeft" title="Прокрутить влево" type="button">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="reg-year-bar" id="regYearBar"></div>
+        <button class="reg-scroll-btn reg-year-scroll-btn hidden" id="regYearScrollRight" title="Прокрутить вправо" type="button">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+      <span class="tag tag-blue" id="regCount"></span>
+    </div>
+    <div class="reg-filter-bar">
+      <div class="reg-filter-wrap">
+        <svg class="reg-filter-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input class="reg-filter-input" id="regFilterInput" placeholder="Фильтр по номеру, дате, месту отправки…" oninput="renderRegistry()">
+      </div>
+    </div>
+    <div id="regBody"></div>
+  </div>
+
+</main>
+</div>
+
+<div class="conn-status">
+  <div class="conn-dot" id="connDot"></div>
+  <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
+</div>
+<footer class="ver-footer">v0.1.0</footer>
+
+<script>
+'use strict';
+
+// Целевая таблица виджета — Inventory_of_Documents (колонки Number:Int,
+// IssueDate:Date, Destination:Text). Список фирм для «Места отправки» берётся
+// из Tu_accounting.client_text — эту таблицу ТОЛЬКО читаем (она синхронизируется
+// вебхуками с внешней системой, писать в неё нельзя).
+var FIRMS_TABLE_CANDIDATES = ['Tu_accounting', 'tu_accounting'];
+
+var state = {
+  records: [],
+  recordsLoaded: false,
+  firms: [],            // уникальные client_text, отсортированы
+  firmsLoaded: false,
+  regYearFilter: null,  // число года или null («Все»)
+  editingId: null
+};
+
+function setConn(ok, label) {
+  document.getElementById('connDot').className = 'conn-dot' + (ok ? ' ok' : '');
+  document.getElementById('connLbl').textContent = label;
+}
+
+function pluralizeRu(n, one, few, many) {
+  var mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}
+
+function updateConnLabel() {
+  var total = state.records.length;
+  setConn(true, total + ' ' + pluralizeRu(total, 'опись', 'описи', 'описей'));
+}
+
+function showError(err) {
+  console.error(err);
+  window.alert('Ошибка: ' + (err && err.message ? err.message : err));
+}
+
+// ---------- Grist wiring ----------
+
+grist.ready({ requiredAccess: 'full' });
+
+grist.onRecords(function (records) {
+  state.recordsLoaded = true;
+  state.records = records;
+  updateConnLabel();
+  updateNumberPreview();
+  syncRegisterBtn();
+  renderRegYearBar();
+  renderRegistry();
+});
+
+// ---------- Firms (Tu_accounting.client_text, без дублей) ----------
+
+function resolveTableId(candidates, allTables) {
+  var lowerAll = (allTables || []).map(function (t) { return String(t).toLowerCase(); });
+  var match = null;
+  candidates.some(function (c) {
+    var idx = lowerAll.indexOf(String(c).toLowerCase());
+    if (idx !== -1) { match = allTables[idx]; return true; }
+    return false;
+  });
+  return match || candidates[0];
+}
+
+function normFirm(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim();
+}
+
+// Дедуп регистронезависимый и без учёта лишних пробелов — сохраняется
+// написание первого встреченного варианта.
+function loadFirms() {
+  var listPromise = grist.docApi.listTables ? grist.docApi.listTables().catch(function () { return null; }) : Promise.resolve(null);
+  listPromise.then(function (allTables) {
+    return grist.docApi.fetchTable(resolveTableId(FIRMS_TABLE_CANDIDATES, allTables));
+  }).then(function (table) {
+    var col = table.client_text || [];
+    var seen = {};
+    var firms = [];
+    col.forEach(function (v) {
+      var name = normFirm(v);
+      if (!name) return;
+      var key = name.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      firms.push(name);
+    });
+    firms.sort(function (a, b) { return a.localeCompare(b, 'ru'); });
+    state.firms = firms;
+    state.firmsLoaded = true;
+    formFirmCombo.refresh();
+    syncRegisterBtn();
+  }).catch(function (err) {
+    console.error('Не удалось загрузить список фирм из Tu_accounting', err);
+    state.firms = [];
+    state.firmsLoaded = true;
+    formFirmCombo.refresh();
+  });
+}
+
+function findFirm(text) {
+  var key = normFirm(text).toLowerCase();
+  if (!key) return null;
+  for (var i = 0; i < state.firms.length; i++) {
+    if (state.firms[i].toLowerCase() === key) return state.firms[i];
+  }
+  return null;
+}
+
+// Комбобокс с поиском по списку фирм: значение принимается только если
+// выбрано из списка (или введённый текст точно совпадает с фирмой) —
+// произвольный текст не сохраняется.
+function createFirmCombo(initialValue, small, onChange) {
+  var value = initialValue || '';
+  var hlIndex = -1;
+  var matches = [];
+
+  var combo = document.createElement('div');
+  combo.className = 'firm-combo';
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'firm-search' + (small ? ' small' : '');
+  input.autocomplete = 'off';
+  input.value = value;
+  var dropdown = document.createElement('div');
+  dropdown.className = 'firm-dropdown';
+  combo.appendChild(input);
+  combo.appendChild(dropdown);
+
+  function setValue(v) {
+    value = v || '';
+    input.value = value;
+    input.classList.remove('invalid');
+    if (onChange) onChange(value);
+  }
+
+  function renderDropdown() {
+    var q = normFirm(input.value).toLowerCase();
+    // Пока текст совпадает с выбранным значением — показываем весь список.
+    if (value && q === value.toLowerCase()) q = '';
+    matches = state.firms.filter(function (f) { return !q || f.toLowerCase().indexOf(q) !== -1; });
+    if (hlIndex >= matches.length) hlIndex = matches.length - 1;
+    dropdown.innerHTML = '';
+    if (!matches.length) {
+      var empty = document.createElement('div');
+      empty.className = 'firm-option-empty';
+      empty.textContent = state.firmsLoaded ? 'Ничего не найдено' : 'Загрузка…';
+      dropdown.appendChild(empty);
+      return;
+    }
+    matches.forEach(function (f, i) {
+      var opt = document.createElement('div');
+      opt.className = 'firm-option' + (i === hlIndex ? ' hl' : '');
+      opt.textContent = f;
+      opt.title = f;
+      // mousedown срабатывает раньше blur у input — выбор успевает примениться.
+      opt.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        setValue(f);
+        dropdown.classList.remove('open');
+        input.blur();
+      });
+      dropdown.appendChild(opt);
+    });
+  }
+
+  function open() { renderDropdown(); dropdown.classList.add('open'); }
+
+  input.addEventListener('focus', function () { hlIndex = -1; open(); input.select(); });
+  input.addEventListener('input', function () {
+    hlIndex = matches.length ? 0 : -1;
+    var exact = findFirm(input.value);
+    value = exact || '';
+    if (onChange) onChange(value);
+    open();
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); hlIndex = Math.min(hlIndex + 1, matches.length - 1); open(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); hlIndex = Math.max(hlIndex - 1, 0); open(); }
+    else if (e.key === 'Enter') {
+      if (hlIndex >= 0 && matches[hlIndex]) { e.preventDefault(); setValue(matches[hlIndex]); dropdown.classList.remove('open'); input.blur(); }
+    } else if (e.key === 'Escape') { dropdown.classList.remove('open'); input.blur(); }
+  });
+  input.addEventListener('blur', function () {
+    dropdown.classList.remove('open');
+    var exact = findFirm(input.value);
+    if (exact) { if (exact !== input.value) setValue(exact); }
+    else input.classList.toggle('invalid', !!normFirm(input.value));
+  });
+
+  return {
+    el: combo,
+    input: input,
+    getValue: function () { return value; },
+    setValue: setValue,
+    refresh: function () {
+      input.placeholder = state.firms.length ? 'Выберите фирму…' : (state.firmsLoaded ? 'Нет фирм в Tu_accounting' : 'Загрузка…');
+      if (dropdown.classList.contains('open')) renderDropdown();
+    }
+  };
+}
+
+// ---------- Date helpers ----------
+
+function formatDate(v) {
+  if (v == null || v === '') return '';
+  var d = (typeof v === 'number') ? new Date(v * 1000) : new Date(v);
+  if (isNaN(d.getTime())) return String(v);
+  return d.toLocaleDateString('ru-RU', { timeZone: 'UTC' });
+}
+function dateToInputValue(v) {
+  if (v == null || v === '') return '';
+  var d = (typeof v === 'number') ? new Date(v * 1000) : new Date(v);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+function inputValueToDate(s) {
+  if (!s) return null;
+  return Math.floor(new Date(s + 'T00:00:00Z').getTime() / 1000);
+}
+function dateToYear(v) {
+  if (v == null || v === '') return null;
+  var d = (typeof v === 'number') ? new Date(v * 1000) : new Date(v);
+  if (isNaN(d.getTime())) return null;
+  return d.getUTCFullYear();
+}
+
+// ---------- Numbering: порядковый номер в году ----------
+
+function computeNextNumber(year) {
+  if (!year) return null;
+  var max = 0;
+  state.records.forEach(function (r) {
+    if (dateToYear(r.IssueDate) !== year) return;
+    var n = parseInt(r.Number, 10);
+    if (!isNaN(n) && n > max) max = n;
+  });
+  return max + 1;
+}
+
+function currentFormYear() {
+  var v = document.getElementById('fDate').value;
+  return v ? parseInt(v.slice(0, 4), 10) : null;
+}
+
+function updateNumberPreview() {
+  var el = document.getElementById('fNum');
+  var year = currentFormYear();
+  var n = state.recordsLoaded ? computeNextNumber(year) : null;
+  el.textContent = n ? (n + ' / ' + year) : '—';
+}
+
+// ---------- Registration form ----------
+
+var fDate = document.getElementById('fDate');
+fDate.value = dateToInputValue(Math.floor(Date.now() / 1000));
+fDate.addEventListener('change', function () { updateNumberPreview(); syncRegisterBtn(); });
+
+var formFirmCombo = createFirmCombo('', false, function () { syncRegisterBtn(); });
+document.getElementById('fDestWrap').appendChild(formFirmCombo.el);
+formFirmCombo.refresh();
+
+var btnRegister = document.getElementById('btnRegister');
+var registering = false;
+function syncRegisterBtn() {
+  btnRegister.disabled = registering || !state.recordsLoaded || !fDate.value || !formFirmCombo.getValue();
+}
+
+btnRegister.addEventListener('click', function () {
+  var year = currentFormYear();
+  var dest = formFirmCombo.getValue();
+  if (!year || !dest) return;
+  var fields = {
+    Number: computeNextNumber(year),
+    IssueDate: inputValueToDate(fDate.value),
+    Destination: dest
+  };
+  registering = true;
+  syncRegisterBtn();
+  grist.selectedTable.create({ fields: fields }).then(function () {
+    registering = false;
+    formFirmCombo.setValue('');
+    syncRegisterBtn();
+  }).catch(function (err) {
+    registering = false;
+    syncRegisterBtn();
+    showError(err);
+  });
+});
+
+document.getElementById('btnRefreshFirms').addEventListener('click', loadFirms);
+
+// ---------- Year chips ----------
+
+function renderRegYearBar() {
+  var bar = document.getElementById('regYearBar');
+  var prevScroll = bar.scrollLeft;
+  var nowYear = new Date().getFullYear();
+  var minYear = nowYear, maxYear = nowYear;
+  state.records.forEach(function (r) {
+    var y = dateToYear(r.IssueDate);
+    if (y == null) return;
+    if (y < minYear) minYear = y;
+    if (y > maxYear) maxYear = y;
+  });
+  bar.innerHTML = '';
+  var allChip = document.createElement('span');
+  allChip.className = 'reg-year-chip' + (state.regYearFilter == null ? ' active' : '');
+  allChip.textContent = 'Все';
+  allChip.addEventListener('click', function () { setRegYearFilter(null); });
+  bar.appendChild(allChip);
+  for (var y = maxYear; y >= minYear; y--) {
+    (function (year) {
+      var chip = document.createElement('span');
+      chip.className = 'reg-year-chip' + (state.regYearFilter === year ? ' active' : '');
+      chip.textContent = String(year);
+      chip.addEventListener('click', function () { setRegYearFilter(year); });
+      bar.appendChild(chip);
+    })(y);
+  }
+  bar.scrollLeft = prevScroll;
+  updateRegYearScrollBtns();
+}
+
+function setRegYearFilter(year) {
+  state.regYearFilter = year;
+  renderRegYearBar();
+  renderRegistry();
+}
+
+function updateRegYearScrollBtns() {
+  var bar = document.getElementById('regYearBar');
+  var left = document.getElementById('regYearScrollLeft');
+  var right = document.getElementById('regYearScrollRight');
+  var canScroll = bar.scrollWidth - bar.clientWidth > 1;
+  left.classList.toggle('hidden', !canScroll || bar.scrollLeft <= 0);
+  right.classList.toggle('hidden', !canScroll || bar.scrollLeft >= bar.scrollWidth - bar.clientWidth - 1);
+}
+
+(function initRegYearScroller() {
+  var bar = document.getElementById('regYearBar');
+  bar.addEventListener('wheel', function (e) {
+    if (!e.deltaY) return;
+    e.preventDefault();
+    bar.scrollLeft += e.deltaY;
+  }, { passive: false });
+  bar.addEventListener('scroll', updateRegYearScrollBtns);
+  window.addEventListener('resize', updateRegYearScrollBtns);
+  document.getElementById('regYearScrollLeft').addEventListener('click', function () { bar.scrollBy({ left: -120, behavior: 'smooth' }); });
+  document.getElementById('regYearScrollRight').addEventListener('click', function () { bar.scrollBy({ left: 120, behavior: 'smooth' }); });
+})();
+
+// ---------- Registry table (list + inline edit) ----------
+
+var regBody = document.getElementById('regBody');
+var regCount = document.getElementById('regCount');
+var regFilterInput = document.getElementById('regFilterInput');
+
+function renderRegistry() {
+  regCount.textContent = state.records.length;
+  var q = (regFilterInput.value || '').trim().toLowerCase();
+  var rows = state.records.slice().sort(function (a, b) {
+    var diff = (b.IssueDate || 0) - (a.IssueDate || 0);
+    if (diff) return diff;
+    return (parseInt(b.Number, 10) || 0) - (parseInt(a.Number, 10) || 0);
+  });
+  if (state.regYearFilter != null) {
+    rows = rows.filter(function (r) { return dateToYear(r.IssueDate) === state.regYearFilter; });
+  }
+  if (q) {
+    rows = rows.filter(function (r) {
+      var hay = [r.Number, formatDate(r.IssueDate), r.Destination]
+        .map(function (v) { return String(v == null ? '' : v).toLowerCase(); }).join(' ');
+      return hay.indexOf(q) !== -1;
+    });
+  }
+
+  if (!rows.length) {
+    regBody.innerHTML = '<div class="reg-empty">' + (state.records.length ? 'Ничего не найдено' : 'Описей пока нет — заполните форму выше') + '</div>';
+    return;
+  }
+
+  var table = document.createElement('table');
+  table.className = 'reg-table';
+  table.innerHTML =
+    '<colgroup><col style="width:90px"><col style="width:120px"><col><col style="width:56px"></colgroup>' +
+    '<thead><tr><th>№</th><th>Дата</th><th style="text-align:left">Куда</th><th></th></tr></thead><tbody></tbody>';
+  var tbody = table.querySelector('tbody');
+
+  rows.forEach(function (r) {
+    var tr = document.createElement('tr');
+    if (state.editingId === r.id) {
+      tr.appendChild(editableRow(r));
+      tbody.appendChild(tr);
+      return;
+    }
+
+    var tdNum = document.createElement('td');
+    tdNum.className = 'reg-dn';
+    tdNum.textContent = r.Number != null ? r.Number : '';
+    tr.appendChild(tdNum);
+
+    var tdDate = document.createElement('td');
+    tdDate.textContent = formatDate(r.IssueDate);
+    tr.appendChild(tdDate);
+
+    var tdDest = document.createElement('td');
+    tdDest.className = 'reg-dest';
+    tdDest.textContent = r.Destination || '';
+    tr.appendChild(tdDest);
+
+    var tdActions = document.createElement('td');
+    tdActions.className = 'reg-actions';
+    var editBtn = iconButton('cell-edit-btn', pencilSvg(), 'Редактировать');
+    editBtn.addEventListener('click', function () { state.editingId = r.id; renderRegistry(); });
+    tdActions.appendChild(editBtn);
+    tr.appendChild(tdActions);
+
+    tbody.appendChild(tr);
+  });
+
+  regBody.innerHTML = '';
+  regBody.appendChild(table);
+}
+
+function editableRow(r) {
+  var frag = document.createDocumentFragment();
+
+  var tdNum = document.createElement('td');
+  var inNum = document.createElement('input');
+  inNum.className = 'form-input mono'; inNum.type = 'number'; inNum.min = '1';
+  inNum.style.textAlign = 'center';
+  inNum.value = r.Number != null ? r.Number : '';
+  tdNum.appendChild(inNum);
+  frag.appendChild(tdNum);
+
+  var tdDate = document.createElement('td');
+  var inDate = document.createElement('input');
+  inDate.className = 'form-input mono'; inDate.type = 'date';
+  inDate.value = dateToInputValue(r.IssueDate);
+  tdDate.appendChild(inDate);
+  frag.appendChild(tdDate);
+
+  var tdDest = document.createElement('td');
+  tdDest.className = 'reg-dest';
+  // Старое значение могло не совпасть ни с одной фирмой из текущего списка —
+  // оставляем его как есть, пока пользователь не выберет другую.
+  var destValue = r.Destination || '';
+  var combo = createFirmCombo(destValue, true, function (v) { destValue = v; });
+  tdDest.appendChild(combo.el);
+  frag.appendChild(tdDest);
+  combo.refresh();
+
+  var tdActions = document.createElement('td');
+  tdActions.className = 'reg-actions';
+  var saveBtn = iconButton('cell-edit-btn save', checkSvg(), 'Сохранить');
+  saveBtn.addEventListener('click', function () {
+    var n = parseInt(inNum.value, 10);
+    var dest = destValue || (normFirm(combo.input.value) === normFirm(r.Destination) ? r.Destination : '');
+    if (!dest) { window.alert('Выберите место отправки из списка.'); return; }
+    var fields = {
+      Number: isNaN(n) ? null : n,
+      IssueDate: inputValueToDate(inDate.value),
+      Destination: dest
+    };
+    saveBtn.disabled = true;
+    grist.selectedTable.update({ id: r.id, fields: fields }).then(function () {
+      state.editingId = null;
+      renderRegistry();
+    }).catch(function (err) { saveBtn.disabled = false; showError(err); });
+  });
+  var cancelBtn = iconButton('cell-edit-btn cancel', xSvg(), 'Отмена');
+  cancelBtn.addEventListener('click', function () { state.editingId = null; renderRegistry(); });
+  tdActions.appendChild(saveBtn);
+  tdActions.appendChild(cancelBtn);
+  frag.appendChild(tdActions);
+
+  return frag;
+}
+
+function iconButton(cls, svg, title) {
+  var btn = document.createElement('button');
+  btn.type = 'button'; btn.className = cls; btn.title = title; btn.innerHTML = svg;
+  return btn;
+}
+function pencilSvg() { return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>'; }
+function checkSvg() { return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>'; }
+function xSvg() { return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>'; }
+
+loadFirms();
+renderRegistry();
+</script>
+</body>
+</html>
