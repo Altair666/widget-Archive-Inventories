@@ -124,7 +124,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
       <span class="ph-title">Регистрация описи</span>
     </div>
     <div class="pb">
-      <div class="form-row" style="grid-template-columns:130px 130px 260px 170px">
+      <div class="form-row" style="grid-template-columns:130px 130px 260px 1fr">
         <div class="form-group">
           <label class="form-label">№ описи</label>
           <div class="form-input mono formed-num" id="fNum">—</div>
@@ -137,9 +137,9 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
           <label class="form-label">Место отправки</label>
           <div id="fDestWrap"></div>
         </div>
-        <div class="form-group">
+        <div class="form-group" style="align-items:flex-end">
           <label class="form-label">&nbsp;</label>
-          <button class="btn-add" id="btnRegister" type="button" disabled>
+          <button class="btn-add" id="btnRegister" type="button" style="width:170px" disabled>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Зарегистрировать
           </button>
         </div>
@@ -178,7 +178,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.1.3</footer>
+<footer class="ver-footer">v0.1.4</footer>
 
 <script>
 'use strict';
