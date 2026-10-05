@@ -64,7 +64,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .firm-search::placeholder{color:var(--tx3)}
 .firm-search.invalid{border-color:var(--warn-brd);background-color:var(--warn-bg)}
 .firm-search.small{height:26px;font-size:11px;padding:0 24px 0 6px;background-position:right 6px center}
-.firm-dropdown{display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);max-height:220px;overflow-y:auto;z-index:30;box-shadow:0 4px 12px rgba(0,0,0,.12);text-align:left}
+.firm-dropdown{display:none;position:fixed;background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);max-height:220px;overflow-y:auto;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.12);text-align:left}
 .firm-dropdown.open{display:block}
 .firm-option{padding:6px 9px;font-size:12px;color:var(--tx);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .firm-option:hover,.firm-option.hl{background:var(--acc-bg);color:var(--acc)}
@@ -105,6 +105,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .cell-edit-btn.cancel{color:var(--red)}
 .cell-edit-btn.cancel:hover{background:var(--red-bg);color:var(--red);border-color:var(--red-brd)}
 .reg-table input.form-input{height:26px;font-size:11px}
+.reg-table .form-input.formed-num{height:26px;font-size:11px}
 .tag{display:inline-flex;align-items:center;font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:4pt}
 .tag-blue{background:var(--acc-bg);color:var(--acc)}
 
@@ -177,7 +178,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.1.2</footer>
+<footer class="ver-footer">v0.1.3</footer>
 
 <script>
 'use strict';
@@ -310,7 +311,6 @@ function createFirmCombo(initialValue, small, onChange) {
   var dropdown = document.createElement('div');
   dropdown.className = 'firm-dropdown';
   combo.appendChild(input);
-  combo.appendChild(dropdown);
 
   function setValue(v) {
     value = v || '';
@@ -342,14 +342,50 @@ function createFirmCombo(initialValue, small, onChange) {
       opt.addEventListener('mousedown', function (e) {
         e.preventDefault();
         setValue(f);
-        dropdown.classList.remove('open');
+        close();
         input.blur();
       });
       dropdown.appendChild(opt);
     });
   }
 
-  function open() { renderDropdown(); dropdown.classList.add('open'); }
+  // Список висит в <body> с position:fixed: внутри реестра его обрезал бы
+  // контейнер с overflow и перекрывали бы плашки статуса/версии внизу.
+  // Если под полем мало места — открываем вверх.
+  var BOTTOM_RESERVE = 30;
+  function position() {
+    var rect = input.getBoundingClientRect();
+    var below = window.innerHeight - rect.bottom - BOTTOM_RESERVE;
+    var above = rect.top - 4;
+    var up = below < 160 && above > below;
+    var maxH = Math.max(80, Math.min(220, up ? above : below));
+    dropdown.style.left = rect.left + 'px';
+    dropdown.style.width = rect.width + 'px';
+    dropdown.style.maxHeight = maxH + 'px';
+    if (up) { dropdown.style.top = ''; dropdown.style.bottom = (window.innerHeight - rect.top + 2) + 'px'; }
+    else { dropdown.style.bottom = ''; dropdown.style.top = (rect.bottom + 2) + 'px'; }
+  }
+  function onViewportChange() {
+    if (!input.isConnected) { close(); return; }
+    if (dropdown.classList.contains('open')) position();
+  }
+  function open() {
+    renderDropdown();
+    if (!dropdown.parentNode) {
+      document.body.appendChild(dropdown);
+      window.addEventListener('scroll', onViewportChange, true);
+      window.addEventListener('resize', onViewportChange);
+    }
+    dropdown.classList.add('open');
+    position();
+  }
+  function close() {
+    dropdown.classList.remove('open');
+    if (dropdown.parentNode) dropdown.parentNode.removeChild(dropdown);
+    window.removeEventListener('scroll', onViewportChange, true);
+    window.removeEventListener('resize', onViewportChange);
+  }
+  dropdown._closeIfOrphan = function () { if (!input.isConnected) close(); };
 
   input.addEventListener('focus', function () { hlIndex = -1; open(); input.select(); });
   input.addEventListener('input', function () {
@@ -363,11 +399,11 @@ function createFirmCombo(initialValue, small, onChange) {
     if (e.key === 'ArrowDown') { e.preventDefault(); hlIndex = Math.min(hlIndex + 1, matches.length - 1); open(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); hlIndex = Math.max(hlIndex - 1, 0); open(); }
     else if (e.key === 'Enter') {
-      if (hlIndex >= 0 && matches[hlIndex]) { e.preventDefault(); setValue(matches[hlIndex]); dropdown.classList.remove('open'); input.blur(); }
-    } else if (e.key === 'Escape') { dropdown.classList.remove('open'); input.blur(); }
+      if (hlIndex >= 0 && matches[hlIndex]) { e.preventDefault(); setValue(matches[hlIndex]); close(); input.blur(); }
+    } else if (e.key === 'Escape') { close(); input.blur(); }
   });
   input.addEventListener('blur', function () {
-    dropdown.classList.remove('open');
+    close();
     var exact = findFirm(input.value);
     if (exact) { if (exact !== input.value) setValue(exact); }
     else input.classList.toggle('invalid', !!normFirm(input.value));
@@ -412,10 +448,11 @@ function dateToYear(v) {
 
 // ---------- Numbering: порядковый номер в году ----------
 
-function computeNextNumber(year) {
+function computeNextNumber(year, excludeId) {
   if (!year) return null;
   var max = 0;
   state.records.forEach(function (r) {
+    if (r.id === excludeId) return;
     if (dateToYear(r.IssueDate) !== year) return;
     var n = parseInt(r.Number, 10);
     if (!isNaN(n) && n > max) max = n;
@@ -605,25 +642,39 @@ function renderRegistry() {
 
   regBody.innerHTML = '';
   regBody.appendChild(table);
+  // Поле редактирования могло исчезнуть при перерисовке с открытым списком.
+  Array.prototype.forEach.call(document.querySelectorAll('body > .firm-dropdown'), function (d) {
+    if (d._closeIfOrphan) d._closeIfOrphan();
+  });
 }
 
 function editableRow(r) {
   var frag = document.createDocumentFragment();
 
+  // № — счётчик, вручную не редактируется (как serial в widget-espdnumber):
+  // пока год даты прежний — номер сохраняется, при переносе в другой год
+  // становится следующим свободным номером того года.
+  var origYear = dateToYear(r.IssueDate);
+  var numValue = r.Number != null ? r.Number : null;
   var tdNum = document.createElement('td');
-  var inNum = document.createElement('input');
-  inNum.className = 'form-input mono'; inNum.type = 'number'; inNum.min = '1';
-  inNum.style.textAlign = 'center';
-  inNum.value = r.Number != null ? r.Number : '';
-  tdNum.appendChild(inNum);
+  var numEl = document.createElement('div');
+  numEl.className = 'form-input mono formed-num';
+  tdNum.appendChild(numEl);
   frag.appendChild(tdNum);
+  function recalcNumber() {
+    var y = inDate.value ? parseInt(inDate.value.slice(0, 4), 10) : null;
+    numValue = (y === origYear && r.Number != null) ? r.Number : computeNextNumber(y, r.id);
+    numEl.textContent = numValue != null ? numValue : '—';
+  }
 
   var tdDate = document.createElement('td');
   var inDate = document.createElement('input');
   inDate.className = 'form-input mono'; inDate.type = 'date';
   inDate.value = dateToInputValue(r.IssueDate);
+  inDate.addEventListener('change', recalcNumber);
   tdDate.appendChild(inDate);
   frag.appendChild(tdDate);
+  recalcNumber();
 
   var tdDest = document.createElement('td');
   tdDest.className = 'reg-dest';
@@ -639,11 +690,10 @@ function editableRow(r) {
   tdActions.className = 'reg-actions';
   var saveBtn = iconButton('cell-edit-btn save', checkSvg(), 'Сохранить');
   saveBtn.addEventListener('click', function () {
-    var n = parseInt(inNum.value, 10);
     var dest = destValue || (normFirm(combo.input.value) === normFirm(r.Destination) ? r.Destination : '');
     if (!dest) { window.alert('Выберите место отправки из списка.'); return; }
     var fields = {
-      Number: isNaN(n) ? null : n,
+      Number: numValue,
       IssueDate: inputValueToDate(inDate.value),
       Destination: dest
     };
