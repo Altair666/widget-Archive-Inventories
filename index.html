@@ -123,7 +123,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
       <span class="ph-title">Регистрация описи</span>
     </div>
     <div class="pb">
-      <div class="form-row" style="grid-template-columns:130px 130px minmax(180px,1fr) 32px 170px">
+      <div class="form-row" style="grid-template-columns:130px 130px 260px 170px">
         <div class="form-group">
           <label class="form-label">№ описи</label>
           <div class="form-input mono formed-num" id="fNum">—</div>
@@ -135,12 +135,6 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
         <div class="form-group">
           <label class="form-label">Место отправки</label>
           <div id="fDestWrap"></div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">&nbsp;</label>
-          <button class="icon-btn form-date-btn" id="btnRefreshFirms" type="button" title="Обновить список фирм из Tu_accounting">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          </button>
         </div>
         <div class="form-group">
           <label class="form-label">&nbsp;</label>
@@ -183,7 +177,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.1.1</footer>
+<footer class="ver-footer">v0.1.2</footer>
 
 <script>
 'use strict';
@@ -193,15 +187,12 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 // из Tu_accounting.client_text — эту таблицу ТОЛЬКО читаем (она синхронизируется
 // вебхуками с внешней системой, писать в неё нельзя).
 var FIRMS_TABLE_CANDIDATES = ['Tu_accounting', 'tu_accounting'];
-var TARGET_TABLE_ID = 'Inventory_of_Documents';
 
 var state = {
   records: [],
   recordsLoaded: false,
   firms: [],            // уникальные client_text, отсортированы
   firmsLoaded: false,
-  boundTableId: null,   // таблица, к которой привязан виджет (Select data)
-  wrongTable: false,    // true — привязан не к Inventory_of_Documents, регистрация заблокирована
   regYearFilter: null,  // число года или null («Все»)
   editingId: null
 };
@@ -219,10 +210,6 @@ function pluralizeRu(n, one, few, many) {
 }
 
 function updateConnLabel() {
-  if (state.wrongTable) {
-    setConn(false, 'Виджет привязан к таблице «' + state.boundTableId + '» — выберите ' + TARGET_TABLE_ID + ' в «Select data»');
-    return;
-  }
   var total = state.records.length;
   setConn(true, total + ' ' + pluralizeRu(total, 'опись', 'описи', 'описей'));
 }
@@ -236,24 +223,12 @@ function showError(err) {
 
 grist.ready({ requiredAccess: 'full' });
 
-// Колонки пишутся напрямую по colId, поэтому привязка к чужой таблице даёт
-// «Invalid column …» при создании строки — проверяем заранее и блокируем форму.
-function checkBoundTable() {
-  if (!grist.selectedTable || !grist.selectedTable.getTableId) return;
-  grist.selectedTable.getTableId().then(function (tableId) {
-    state.boundTableId = tableId;
-    state.wrongTable = !!tableId && tableId !== TARGET_TABLE_ID;
-    updateConnLabel();
-    syncRegisterBtn();
-    renderRegistry();
-  }).catch(function (err) { console.error('Не удалось определить привязанную таблицу', err); });
-}
-checkBoundTable();
-
 grist.onRecords(function (records) {
   state.recordsLoaded = true;
   state.records = records;
-  checkBoundTable();
+  // Список фирм читается после того, как Grist выдал виджету доступ; если
+  // загрузка не удалась (например, доступ ещё не разрешён) — повторяем здесь.
+  if (!state.firmsLoaded) loadFirms();
   updateConnLabel();
   updateNumberPreview();
   syncRegisterBtn();
@@ -304,7 +279,6 @@ function loadFirms() {
   }).catch(function (err) {
     console.error('Не удалось загрузить список фирм из Tu_accounting', err);
     state.firms = [];
-    state.firmsLoaded = true;
     formFirmCombo.refresh();
   });
 }
@@ -355,7 +329,7 @@ function createFirmCombo(initialValue, small, onChange) {
     if (!matches.length) {
       var empty = document.createElement('div');
       empty.className = 'firm-option-empty';
-      empty.textContent = state.firmsLoaded ? 'Ничего не найдено' : 'Загрузка…';
+      empty.textContent = 'Ничего не найдено';
       dropdown.appendChild(empty);
       return;
     }
@@ -405,7 +379,7 @@ function createFirmCombo(initialValue, small, onChange) {
     getValue: function () { return value; },
     setValue: setValue,
     refresh: function () {
-      input.placeholder = state.firms.length ? 'Выберите фирму…' : (state.firmsLoaded ? 'Нет фирм в Tu_accounting' : 'Загрузка…');
+      input.placeholder = 'Выберите фирму…';
       if (dropdown.classList.contains('open')) renderDropdown();
     }
   };
@@ -474,7 +448,7 @@ formFirmCombo.refresh();
 var btnRegister = document.getElementById('btnRegister');
 var registering = false;
 function syncRegisterBtn() {
-  btnRegister.disabled = registering || state.wrongTable || !state.recordsLoaded || !fDate.value || !formFirmCombo.getValue();
+  btnRegister.disabled = registering || !state.recordsLoaded || !fDate.value || !formFirmCombo.getValue();
 }
 
 btnRegister.addEventListener('click', function () {
@@ -499,7 +473,6 @@ btnRegister.addEventListener('click', function () {
   });
 });
 
-document.getElementById('btnRefreshFirms').addEventListener('click', loadFirms);
 
 // ---------- Year chips ----------
 
@@ -568,12 +541,6 @@ var regCount = document.getElementById('regCount');
 var regFilterInput = document.getElementById('regFilterInput');
 
 function renderRegistry() {
-  if (state.wrongTable) {
-    regCount.textContent = '';
-    regBody.innerHTML = '<div class="reg-empty" style="color:var(--red)">Виджет привязан к таблице «' + state.boundTableId +
-      '». В настройках виджета (Select data) выберите таблицу ' + TARGET_TABLE_ID + '.</div>';
-    return;
-  }
   regCount.textContent = state.records.length;
   var q = (regFilterInput.value || '').trim().toLowerCase();
   var rows = state.records.slice().sort(function (a, b) {
@@ -704,7 +671,6 @@ function pencilSvg() { return '<svg width="12" height="12" viewBox="0 0 24 24" f
 function checkSvg() { return '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>'; }
 function xSvg() { return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>'; }
 
-loadFirms();
 renderRegistry();
 </script>
 </body>
