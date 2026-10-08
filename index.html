@@ -130,6 +130,16 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .reg-ntc{display:flex;flex-wrap:wrap;gap:3px}
 .reg-left{text-align:left!important;word-break:break-word;overflow-wrap:anywhere}
 .reg-sub{display:block;font-family:var(--mono);font-size:10px;color:var(--tx3)}
+/* Правка адреса / MD5 прямо в ячейке реестра */
+.inline-edit{display:flex;align-items:flex-start;gap:2px}
+.inline-edit .inline-val{flex:1 1 auto;min-width:0;white-space:normal;word-break:break-word;overflow-wrap:anywhere}
+.inline-edit .inline-val.empty{font-style:italic;opacity:.7}
+.inline-edit > .cell-edit-btn{width:16px;height:16px;opacity:.35}
+.reg-table tr:hover .inline-edit > .cell-edit-btn,.inline-edit > .cell-edit-btn:focus{opacity:1}
+.inline-edit.editing{flex-direction:column;align-items:stretch;gap:3px;margin-top:2px}
+.inline-edit textarea.form-input{height:auto;min-height:48px;padding:5px 7px;font-size:11px;resize:vertical;white-space:normal}
+.inline-edit input.form-input{height:24px;font-size:10.5px;padding:0 6px}
+.inline-btns{display:flex;justify-content:flex-end;gap:2px}
 
 /* ── Столбец скачивания PDF (как в notification_numbers) ── */
 .reg-dl,.reg-dl-head{white-space:nowrap;text-align:center!important;padding-left:0!important;padding-right:0!important}
@@ -246,7 +256,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.6.0</footer>
+<footer class="ver-footer">v0.7.0</footer>
 
 <script>
 'use strict';
@@ -284,6 +294,9 @@ var state = {
   ordersById: {},
   docsById: {},         // Inventory_book: id -> {des, inv, sheets, version, name}
   addressByFirm: {},    // Firm_addresses: фирма (lower) -> адрес
+  addressIdByFirm: {},  // Firm_addresses: фирма (lower) -> id записи
+  inlineEdit: null,     // что правится прямо в ячейке реестра: 'addr:<id описи>' | 'sig:<id описи>:<id документа>'
+  inlineDraft: '',      // введённый текст — переживает перерисовку реестра
   componentsById: {},   // id -> {id, name, dn, parent}
   componentByDn: {},    // decimal_number -> component (основное изделие)
   notices: [],          // [{id, number, date, dn, product}]
@@ -472,13 +485,15 @@ function loadRefData() {
     state.noticesById = {};
     notices.forEach(function (n) { state.noticesById[n.id] = n; });
 
-    var addr = {};
+    var addr = {}, addrIds = {};
     (at.id || []).forEach(function (id, i) {
       var f = normFirm(at.Firm ? at.Firm[i] : '').toLowerCase();
       var a = at.Address ? String(at.Address[i] || '').trim() : '';
+      if (f && !addrIds[f]) addrIds[f] = id;
       if (f && a) addr[f] = a;
     });
     state.addressByFirm = addr;
+    state.addressIdByFirm = addrIds;
 
     var raw = {};
     (own.id || []).forEach(function (id, i) {
@@ -504,6 +519,73 @@ function loadRefData() {
 function normDes(s) { return String(s || '').replace(/\s+/g, '').toUpperCase(); }
 
 function firmAddress(firm) { return state.addressByFirm[normFirm(firm).toLowerCase()] || ''; }
+
+// Адрес фирмы — в Firm_addresses (нет записи — добавляем).
+function saveFirmAddress(firm, address) {
+  var key = normFirm(firm).toLowerCase();
+  var id = state.addressIdByFirm[key];
+  var action = id
+    ? ['UpdateRecord', ADDRESSES_TABLE, id, { Address: address }]
+    : ['AddRecord', ADDRESSES_TABLE, null, { Firm: normFirm(firm), Address: address }];
+  return grist.docApi.applyUserActions([action]).then(function (res) {
+    if (!id && res && res.retValues && typeof res.retValues[0] === 'number') state.addressIdByFirm[key] = res.retValues[0];
+    if (address) state.addressByFirm[key] = address; else delete state.addressByFirm[key];
+  });
+}
+
+// Сигнатура (MD5) документа — в Inventory_book.Signature.
+function saveDocSignature(docId, sig) {
+  return grist.docApi.applyUserActions([['UpdateRecord', INVENTORY_TABLE, docId, { Signature: sig }]]).then(function () {
+    if (state.docsById[docId]) state.docsById[docId].signature = sig;
+  });
+}
+
+// Правка одного текстового значения прямо в ячейке реестра: карандаш → поле → ✓/✕.
+// key — что правится (state.inlineEdit), save(value) возвращает Promise.
+function inlineField(key, value, opts, save) {
+  var wrap = document.createElement('span');
+  wrap.className = 'inline-edit' + (opts.cls ? ' ' + opts.cls : '');
+  if (state.inlineEdit !== key) {
+    var txt = document.createElement('span');
+    txt.className = 'inline-val' + (value ? '' : ' empty');
+    txt.textContent = value ? (opts.prefix || '') + value : opts.placeholder;
+    var edit = iconButton('cell-edit-btn', pencilSvg(), opts.title);
+    edit.addEventListener('click', function () { state.inlineEdit = key; state.inlineDraft = value || ''; renderRegistry(); });
+    wrap.appendChild(txt);
+    wrap.appendChild(edit);
+    return wrap;
+  }
+  var input = document.createElement(opts.multiline ? 'textarea' : 'input');
+  input.className = 'form-input' + (opts.mono ? ' mono' : '');
+  if (opts.multiline) input.rows = 3;
+  input.value = state.inlineDraft;
+  input.placeholder = opts.placeholder;
+  input.addEventListener('input', function () { state.inlineDraft = input.value; });
+  var ok = iconButton('cell-edit-btn save', checkSvg(), 'Сохранить');
+  var cancel = iconButton('cell-edit-btn cancel', xSvg(), 'Отмена');
+  var done = function () { state.inlineEdit = null; state.inlineDraft = ''; renderRegistry(); };
+  var commit = function () {
+    var v = input.value.replace(/\s+/g, ' ').trim();
+    if (v === (value || '')) { done(); return; }
+    ok.disabled = true;
+    save(v).then(done).catch(function (err) { ok.disabled = false; showError(err); });
+  };
+  ok.addEventListener('click', commit);
+  cancel.addEventListener('click', done);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { e.preventDefault(); done(); }
+    else if (e.key === 'Enter' && (!opts.multiline || e.ctrlKey)) { e.preventDefault(); commit(); }
+  });
+  var btns = document.createElement('span');
+  btns.className = 'inline-btns';
+  btns.appendChild(ok);
+  btns.appendChild(cancel);
+  wrap.classList.add('editing');
+  wrap.appendChild(input);
+  wrap.appendChild(btns);
+  setTimeout(function () { if (document.body.contains(input)) input.focus(); }, 0);
+  return wrap;
+}
 
 function ordersForFirm(firm, keepId) {
   var key = normFirm(firm).toLowerCase();
@@ -1253,10 +1335,10 @@ function renderRegistry() {
     var tdDest = document.createElement('td');
     tdDest.className = 'reg-dest';
     tdDest.textContent = r.Destination || '';
-    if (v.address) {
-      var adr = document.createElement('span');
-      adr.className = 'reg-sub'; adr.textContent = v.address;
-      tdDest.appendChild(adr);
+    if (r.Destination) {
+      tdDest.appendChild(inlineField('addr:' + r.id, firmAddress(r.Destination),
+        { cls: 'reg-sub', multiline: true, placeholder: 'адрес не указан', title: 'Изменить адрес фирмы' },
+        function (val) { return saveFirmAddress(r.Destination, val); }));
     }
     tr.appendChild(tdDest);
 
@@ -1297,6 +1379,11 @@ function renderRegistry() {
       var meta = document.createElement('span');
       meta.className = 'reg-sub'; meta.textContent = docMeta(d);
       line.appendChild(meta);
+      if (d.id != null && state.docsById[d.id]) {
+        line.appendChild(inlineField('sig:' + r.id + ':' + d.id, state.docsById[d.id].signature,
+          { cls: 'reg-sub', mono: true, prefix: 'MD5 ', placeholder: 'MD5 —', title: 'Изменить сигнатуру (MD5)' },
+          function (val) { return saveDocSignature(d.id, val); }));
+      }
       tdDocs.appendChild(line);
     });
 
@@ -1455,22 +1542,60 @@ function loadOpisAssets() {
 
 // Раскладка строк по листам. Последний лист должен вместить подписи; иначе хвост уезжает на новый лист.
 // Строка-группа (название изделия) не остаётся последней на листе — уходит вместе со своими документами.
+// Строка-группа — двухстрочная (L.groupRow), остальные — L.row.
+function opisRowHeight(L, row) { return row.group ? (L.groupRow || L.row) : L.row; }
+
 function opisPaginate(L, rows, lay) {
-  var cap = function (top) { return Math.floor((L.bottom - top) / L.row + 1e-6); };
-  var signRows = Math.ceil((L.sign.gap + 2 * L.sign.line) / L.row);
+  var signH = L.sign.gap + 2 * L.sign.line;
   var pages = [];
   var i = 0;
   while (true) {
-    var top = pages.length ? lay.topA : lay.top1;
-    var left = rows.length - i;
-    if (left + signRows <= cap(top)) { pages.push(rows.slice(i)); break; }
-    var n = Math.min(cap(top), left);
-    if (n === left) n = left - 1;
-    while (n > 1 && rows[i + n - 1].group) n--;
-    pages.push(rows.slice(i, i + n));
-    i += n;
+    var room = L.bottom - (pages.length ? lay.topA : lay.top1) + 1e-6;
+    var sum = 0, j = i;
+    while (j < rows.length && sum + opisRowHeight(L, rows[j]) <= room) { sum += opisRowHeight(L, rows[j]); j++; }
+    if (j === rows.length && sum + signH <= room) { pages.push(rows.slice(i)); break; }
+    if (j === rows.length) j--;                          // подписи не влезли — хвост на следующий лист
+    while (j - i > 1 && rows[j - 1].group) j--;
+    if (j <= i) j = i + 1;
+    pages.push(rows.slice(i, j));
+    i = j;
   }
   return pages;
+}
+
+// Внешний вид текстового поля: перенос (у multiline), центровка по вертикали,
+// выравнивание по Q, кегль уменьшается от размера в DA до 6, пока текст не влезет.
+function opisFitAppearance(field, maxSize) {
+  var P = window.PDFLib;
+  var text = String(field.getText() || '').trim();
+  var q = field.acroField.dict.get(P.PDFName.of('Q'));
+  var align = q ? q.asNumber() : 0;
+  var wrap = field.isMultiline();
+  return function (f, widget, font) {
+    var r = widget.getRectangle(), padX = 1, padY = 0.5;
+    var bw = r.width - 2 * padX, bh = r.height - 2 * padY;
+    var size = maxSize, lines, lh;
+    while (true) {
+      lh = size * 1.15;
+      lines = wrap
+        ? P.layoutMultilineText(text, { alignment: P.TextAlignment.Left, fontSize: size, font: font,
+                                        bounds: { x: 0, y: 0, width: bw, height: bh } }).lines
+        : [{ encoded: font.encodeText(text), width: font.widthOfTextAtSize(text, size) }];
+      var maxW = Math.max.apply(null, lines.map(function (l) { return l.width; }));
+      if ((maxW <= bw && (lines.length - 1) * lh + size * 1.1 <= bh) || size <= 6) break;
+      size -= 0.5;
+    }
+    var n = lines.length, cy = r.height / 2;
+    var placed = lines.map(function (l, k) {
+      var x = align === 1 ? padX + (bw - l.width) / 2 : align === 2 ? padX + bw - l.width : padX;
+      return { encoded: l.encoded, x: x, y: cy + ((n - 1) / 2 - k) * lh - 0.33 * size };
+    });
+    var z = P.degrees(0);
+    return [P.beginMarkedContent('Tx'), P.pushGraphicsState(),
+            P.rectangle(0, 0, r.width, r.height), P.clip(), P.endPath()]
+      .concat(P.drawTextLines(placed, { color: P.rgb(0, 0, 0), font: font.name, size: size, rotate: z, xSkew: z, ySkew: z }))
+      .concat([P.popGraphicsState(), P.endMarkedContent()]);
+  };
 }
 
 // kind: 'copies' | 'edocs'; data.rows: [{group: 'Изделие'} | {inv, designation, ext, signature, sheets, copies}]
@@ -1521,7 +1646,7 @@ function buildOpisPart(kind, data, A) {
         var pre = function (s) { return s === 1 ? '' : 'L' + s + '_'; };
 
         // поле поверх ячейки (x, y — левый верх, мм); align: 0 влево, 1 по центру
-        var addField = function (page, name, x, y, w, h, value, size, align) {
+        var addField = function (page, name, x, y, w, h, value, size, align, multiline) {
           if (size == null) size = L.fontSize;
           if (align == null) align = 1;
           var f = form.createTextField(name);
@@ -1529,6 +1654,7 @@ function buildOpisPart(kind, data, A) {
                               borderWidth: 0, borderColor: undefined, backgroundColor: undefined, font: font });
           f.acroField.setDefaultAppearance('/TiNR ' + size + ' Tf 0 g');
           f.acroField.dict.set(PDFName.of('Q'), pdf.context.obj(align));
+          if (multiline) f.enableMultiline();
           if (value != null && value !== '') f.setText(String(value));
         };
         var line = function (page, x1, y1, x2, y2) {
@@ -1544,13 +1670,14 @@ function buildOpisPart(kind, data, A) {
           var y = si ? lay.topA : lay.top1;
           rows.forEach(function (row) {
             n++;
-            xs.forEach(function (x) { line(page, x, y, x, y + L.row); });
-            line(page, xs[0], y + L.row, xs[xs.length - 1], y + L.row);
+            var h = opisRowHeight(L, row);
+            xs.forEach(function (x) { line(page, x, y, x, y + h); });
+            line(page, xs[0], y + h, xs[xs.length - 1], y + h);
             lay.keys.forEach(function (k, j) {
               var v = row.group ? (k === 'designation' ? row.group : '') : row[k];
-              addField(page, 'r' + n + '_' + k, xs[j], y, lay.cols[j], L.row, v, lay.cols[j] > 16 ? L.fontSize : 10);
+              addField(page, 'r' + n + '_' + k, xs[j], y, lay.cols[j], h, v, lay.cols[j] > 16 ? L.fontSize : 10, 1, !!row.group);
             });
-            y += L.row;
+            y += h;
           });
           if (si === total - 1) {                             // подписи — сразу под таблицей
             y += L.sign.gap;
@@ -1574,7 +1701,13 @@ function buildOpisPart(kind, data, A) {
         for (var s = 1; s <= total; s++) { set(pre(s) + 'num', data.num); set(pre(s) + 'sheet', s); }
 
         form.updateFieldAppearances(font);
-        form.getFields().forEach(function (f) { if (/(^|_)num$/.test(f.getName())) f.updateAppearances(bold); });
+        form.getFields().forEach(function (f) {
+          if (/(^|_)num$/.test(f.getName())) { f.updateAppearances(bold); return; }
+          if (!(f instanceof PDFLib.PDFTextField) || !String(f.getText() || '').trim()) return;
+          var m = /([\d.]+)\s+Tf/.exec(f.acroField.getDefaultAppearance() || '');
+          f.updateAppearances(font, opisFitAppearance(f, m ? +m[1] : L.fontSize));
+        });
+        form.acroForm.dict.set(PDFName.of('NeedAppearances'), PDFLib.PDFBool.False);
         return pdf;
       });
     });
