@@ -121,25 +121,13 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .ntc-all:hover{text-decoration:underline}
 .lock-btn{width:32px;padding:0}
 .lock-btn.off{background:var(--red-br)}
-.form-one-row{grid-template-columns:90px 122px 32px minmax(140px,1.1fr) minmax(110px,.9fr) minmax(130px,1fr) minmax(120px,1fr) minmax(140px,1.2fr) minmax(150px,1.4fr) auto;align-items:end}
+.form-one-row{grid-template-columns:90px 122px 32px minmax(160px,1.1fr) minmax(130px,.9fr) minmax(160px,1fr) minmax(180px,1.6fr) auto;align-items:end}
 .form-select.mono{font-family:var(--mono)}
-.reg-bought,.reg-table td.reg-bought{font-family:var(--mono);font-size:10px;color:var(--tx2);text-align:left;word-break:break-word;overflow-wrap:anywhere}
 .reg-doc{display:block;font-family:var(--mono);font-size:10.5px;text-align:left;white-space:nowrap}
 .reg-doc + .reg-doc{margin-top:3px}
-.reg-doc .reg-sub{font-size:9.5px}
 .reg-ntc{display:flex;flex-wrap:wrap;gap:3px}
 .reg-left{text-align:left!important;word-break:break-word;overflow-wrap:anywhere}
 .reg-sub{display:block;font-family:var(--mono);font-size:10px;color:var(--tx3)}
-/* Правка адреса / MD5 прямо в ячейке реестра */
-.inline-edit{display:flex;align-items:flex-start;gap:2px}
-.inline-edit .inline-val{flex:1 1 auto;min-width:0;white-space:normal;word-break:break-word;overflow-wrap:anywhere}
-.inline-edit .inline-val.empty{font-style:italic;opacity:.7}
-.inline-edit > .cell-edit-btn{width:16px;height:16px;opacity:.35}
-.reg-table tr:hover .inline-edit > .cell-edit-btn,.inline-edit > .cell-edit-btn:focus{opacity:1}
-.inline-edit.editing{flex-direction:column;align-items:stretch;gap:3px;margin-top:2px}
-.inline-edit textarea.form-input{height:auto;min-height:48px;padding:5px 7px;font-size:11px;resize:vertical;white-space:normal}
-.inline-edit input.form-input{height:24px;font-size:10.5px;padding:0 6px}
-.inline-btns{display:flex;justify-content:flex-end;gap:2px}
 
 /* ── Столбец скачивания PDF (как в notification_numbers) ── */
 .reg-dl,.reg-dl-head{white-space:nowrap;text-align:center!important;padding-left:0!important;padding-right:0!important}
@@ -200,20 +188,12 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
           <div id="fProductWrap"></div>
         </div>
         <div class="form-group">
-          <label class="form-label">Обозначение</label>
-          <div id="fDnWrap"></div>
-        </div>
-        <div class="form-group">
           <label class="form-label">Заказ</label>
           <div id="fOrderWrap"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Извещения</label>
           <div id="fNoticesWrap"></div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Документы</label>
-          <div id="fDocsWrap"></div>
         </div>
         <div class="form-group">
           <label class="form-label">&nbsp;</label>
@@ -256,7 +236,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.9.0</footer>
+<footer class="ver-footer">v0.10.0</footer>
 
 <script>
 'use strict';
@@ -294,9 +274,6 @@ var state = {
   ordersById: {},
   docsById: {},         // Inventory_book: id -> {des, inv, sheets, version, name}
   addressByFirm: {},    // Firm_addresses: фирма (lower) -> адрес
-  addressIdByFirm: {},  // Firm_addresses: фирма (lower) -> id записи
-  inlineEdit: null,     // что правится прямо в ячейке реестра: 'addr:<id описи>' | 'sig:<id описи>:<id документа>'
-  inlineDraft: '',      // введённый текст — переживает перерисовку реестра
   componentsById: {},   // id -> {id, name, dn, parent}
   componentByDn: {},    // decimal_number -> component (основное изделие)
   notices: [],          // [{id, number, date, dn, product}]
@@ -485,15 +462,13 @@ function loadRefData() {
     state.noticesById = {};
     notices.forEach(function (n) { state.noticesById[n.id] = n; });
 
-    var addr = {}, addrIds = {};
+    var addr = {};
     (at.id || []).forEach(function (id, i) {
       var f = normFirm(at.Firm ? at.Firm[i] : '').toLowerCase();
       var a = at.Address ? String(at.Address[i] || '').trim() : '';
-      if (f && !addrIds[f]) addrIds[f] = id;
       if (f && a) addr[f] = a;
     });
     state.addressByFirm = addr;
-    state.addressIdByFirm = addrIds;
 
     var raw = {};
     (own.id || []).forEach(function (id, i) {
@@ -520,72 +495,6 @@ function normDes(s) { return String(s || '').replace(/\s+/g, '').toUpperCase(); 
 
 function firmAddress(firm) { return state.addressByFirm[normFirm(firm).toLowerCase()] || ''; }
 
-// Адрес фирмы — в Firm_addresses (нет записи — добавляем).
-function saveFirmAddress(firm, address) {
-  var key = normFirm(firm).toLowerCase();
-  var id = state.addressIdByFirm[key];
-  var action = id
-    ? ['UpdateRecord', ADDRESSES_TABLE, id, { Address: address }]
-    : ['AddRecord', ADDRESSES_TABLE, null, { Firm: normFirm(firm), Address: address }];
-  return grist.docApi.applyUserActions([action]).then(function (res) {
-    if (!id && res && res.retValues && typeof res.retValues[0] === 'number') state.addressIdByFirm[key] = res.retValues[0];
-    if (address) state.addressByFirm[key] = address; else delete state.addressByFirm[key];
-  });
-}
-
-// Сигнатура (MD5) документа — в Inventory_book.Signature.
-function saveDocSignature(docId, sig) {
-  return grist.docApi.applyUserActions([['UpdateRecord', INVENTORY_TABLE, docId, { Signature: sig }]]).then(function () {
-    if (state.docsById[docId]) state.docsById[docId].signature = sig;
-  });
-}
-
-// Правка одного текстового значения прямо в ячейке реестра: карандаш → поле → ✓/✕.
-// key — что правится (state.inlineEdit), save(value) возвращает Promise.
-function inlineField(key, value, opts, save) {
-  var wrap = document.createElement('span');
-  wrap.className = 'inline-edit' + (opts.cls ? ' ' + opts.cls : '');
-  if (state.inlineEdit !== key) {
-    var txt = document.createElement('span');
-    txt.className = 'inline-val' + (value ? '' : ' empty');
-    txt.textContent = value ? (opts.prefix || '') + value : opts.placeholder;
-    var edit = iconButton('cell-edit-btn', pencilSvg(), opts.title);
-    edit.addEventListener('click', function () { state.inlineEdit = key; state.inlineDraft = value || ''; renderRegistry(); });
-    wrap.appendChild(txt);
-    wrap.appendChild(edit);
-    return wrap;
-  }
-  var input = document.createElement(opts.multiline ? 'textarea' : 'input');
-  input.className = 'form-input' + (opts.mono ? ' mono' : '');
-  if (opts.multiline) input.rows = 3;
-  input.value = state.inlineDraft;
-  input.placeholder = opts.placeholder;
-  input.addEventListener('input', function () { state.inlineDraft = input.value; });
-  var ok = iconButton('cell-edit-btn save', checkSvg(), 'Сохранить');
-  var cancel = iconButton('cell-edit-btn cancel', xSvg(), 'Отмена');
-  var done = function () { state.inlineEdit = null; state.inlineDraft = ''; renderRegistry(); };
-  var commit = function () {
-    var v = input.value.replace(/\s+/g, ' ').trim();
-    if (v === (value || '')) { done(); return; }
-    ok.disabled = true;
-    save(v).then(done).catch(function (err) { ok.disabled = false; showError(err); });
-  };
-  ok.addEventListener('click', commit);
-  cancel.addEventListener('click', done);
-  input.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') { e.preventDefault(); done(); }
-    else if (e.key === 'Enter' && (!opts.multiline || e.ctrlKey)) { e.preventDefault(); commit(); }
-  });
-  var btns = document.createElement('span');
-  btns.className = 'inline-btns';
-  btns.appendChild(ok);
-  btns.appendChild(cancel);
-  wrap.classList.add('editing');
-  wrap.appendChild(input);
-  wrap.appendChild(btns);
-  setTimeout(function () { if (document.body.contains(input)) input.focus(); }, 0);
-  return wrap;
-}
 
 function ordersForFirm(firm, keepId) {
   var key = normFirm(firm).toLowerCase();
@@ -660,9 +569,18 @@ function orderLabel(o) {
   return s;
 }
 
-function docMeta(d) {
-  return 'инв. ' + (d.inv || '—') + ' · л. ' + (d.sheets != null && d.sheets !== '' ? d.sheets : '—') +
-    ' · изм. ' + (d.version != null && d.version !== '' ? d.version : '—');
+// Документ одной строкой: «26-00015 ЛМАП.402131.018ТУ_изм.13».
+function docLine(d) {
+  var v = d.version != null && d.version !== '' ? '_изм.' + d.version : '';
+  return ((d.inv ? d.inv + ' ' : '') + d.des + v).trim();
+}
+
+function docLineEl(d) {
+  var el = document.createElement('span');
+  el.className = 'reg-doc';
+  el.title = d.name || '';
+  el.textContent = docLine(d);
+  return el;
 }
 
 // Каскад «изделие (наименование ⇄ обозначение) → заказ → извещения →
@@ -683,7 +601,6 @@ function createCascade(opts) {
   var keepOrderId = init.order || 0;
   var initProductId = init.product || 0;
   var keepNotices = (init.notices || []).slice();
-  var keepDocs = (init.documents || []).slice();
 
   function mkSelect() {
     var s = document.createElement('select');
@@ -697,9 +614,6 @@ function createCascade(opts) {
   var box = document.createElement('div');
   box.className = 'ntc-box' + (small ? ' small' : '');
   var docBox = document.createElement('div');
-  docBox.className = 'ntc-box' + (small ? ' small' : '');
-  var boughtEl = document.createElement('div');
-  boughtEl.className = 'reg-bought';
 
   function fillSelect(sel, items, selected, placeholder, labelFn) {
     sel.innerHTML = '';
@@ -744,13 +658,14 @@ function createCascade(opts) {
     target.appendChild(a);
   }
 
-  // Документы, доступные при текущем выборе извещений (+ уже сохранённые).
-  function availableDocs(order) {
+  // Документы описи однозначно определяются заказом и извещениями —
+  // купленные документы выбранных извещений.
+  function docsOf(order) {
     var out = [];
+    if (!order) return out;
     cur.notices.forEach(function (nid) {
       boughtDocsOfNotice(order, state.noticesById[nid]).forEach(function (id) { if (out.indexOf(id) === -1) out.push(id); });
     });
-    keepDocs.forEach(function (id) { if (out.indexOf(id) === -1 && state.docsById[id]) out.push(id); });
     return out;
   }
 
@@ -770,7 +685,6 @@ function createCascade(opts) {
     fillSelect(orderSel, orders, cur.order, !prod ? '—' : 'Выберите заказ…', orderLabel);
     var order = state.ordersById[cur.order];
     if (order && order.docText) orderSel.title = orderLabel(order) + '\nКуплено: ' + order.docText;
-    boughtEl.textContent = order ? (order.docText || '—') : '';
 
     var list = freeNotices(order, prod, exceptId, keepNotices);
     var allowed = {};
@@ -789,10 +703,7 @@ function createCascade(opts) {
           // Включили извещение — сразу отмечаем его купленные документы;
           // выключили — убираем документы, которых нет в других выбранных.
           if (on) cur.notices.splice(cur.notices.indexOf(n.id), 1);
-          else {
-            cur.notices.push(n.id);
-            boughtDocsOfNotice(order, n).forEach(function (id) { if (cur.documents.indexOf(id) === -1) cur.documents.push(id); });
-          }
+          else cur.notices.push(n.id);
           render(); changed();
         }));
       });
@@ -800,36 +711,16 @@ function createCascade(opts) {
         var allOn = cur.notices.length === list.length;
         allToggle(box, allOn, function () {
           cur.notices = allOn ? [] : list.map(function (n) { return n.id; });
-          if (!allOn) list.forEach(function (n) {
-            boughtDocsOfNotice(order, n).forEach(function (id) { if (cur.documents.indexOf(id) === -1) cur.documents.push(id); });
-          });
           render(); changed();
         });
       }
     }
 
-    var docs = availableDocs(order);
-    cur.documents = cur.documents.filter(function (id) { return docs.indexOf(id) !== -1; });
+    cur.documents = docsOf(order);
     docBox.innerHTML = '';
     if (!cur.notices.length) hint(docBox, 'Выберите извещение');
-    else if (!docs.length) hint(docBox, 'Нет купленных документов');
-    else {
-      docs.forEach(function (id) {
-        var d = state.docsById[id];
-        var on = cur.documents.indexOf(id) !== -1;
-        docBox.appendChild(chip(d.des, '', on, (d.name ? d.name + '\n' : '') + docMeta(d), function () {
-          if (on) cur.documents.splice(cur.documents.indexOf(id), 1); else cur.documents.push(id);
-          render(); changed();
-        }));
-      });
-      if (docs.length > 1) {
-        var allDocs = cur.documents.length === docs.length;
-        allToggle(docBox, allDocs, function () {
-          cur.documents = allDocs ? [] : docs.slice();
-          render(); changed();
-        });
-      }
-    }
+    else if (!cur.documents.length) hint(docBox, 'Нет купленных документов');
+    else cur.documents.forEach(function (id) { docBox.appendChild(docLineEl(state.docsById[id])); });
   }
 
   function changed() { if (opts.onChange) opts.onChange(); }
@@ -853,7 +744,6 @@ function createCascade(opts) {
     productEl: productSel,
     dnEl: dnSel,
     orderEl: orderSel,
-    boughtEl: boughtEl,
     noticesEl: box,
     docsEl: docBox,
     setFirm: function (f) {
@@ -866,7 +756,7 @@ function createCascade(opts) {
     },
     reset: function () {
       cur = { order: 0, product: 0, notices: [], documents: [] };
-      keepOrderId = 0; initProductId = 0; keepNotices = []; keepDocs = [];
+      keepOrderId = 0; initProductId = 0; keepNotices = [];
       render(); changed();
     },
     refresh: render
@@ -1137,10 +1027,8 @@ fDate.addEventListener('change', function () { updateNumberPreview(); syncRegist
 
 var formCascade = createCascade({ onChange: function () { syncRegisterBtn(); } });
 document.getElementById('fProductWrap').appendChild(formCascade.productEl);
-document.getElementById('fDnWrap').appendChild(formCascade.dnEl);
 document.getElementById('fOrderWrap').appendChild(formCascade.orderEl);
 document.getElementById('fNoticesWrap').appendChild(formCascade.noticesEl);
-document.getElementById('fDocsWrap').appendChild(formCascade.docsEl);
 
 var formFirmCombo = createFirmCombo('', false, function (v) { formCascade.setFirm(v); syncRegisterBtn(); });
 document.getElementById('fDestWrap').appendChild(formFirmCombo.el);
@@ -1290,9 +1178,9 @@ function renderRegistry() {
   if (q) {
     rows = rows.filter(function (r) {
       var v = recordView(r);
-      var hay = [r.Number, formatDate(r.IssueDate), r.Destination, v.address, v.orderText, v.productText, v.dnText, v.boughtText]
+      var hay = [r.Number, formatDate(r.IssueDate), r.Destination, v.orderText, v.productText, v.dnText]
         .concat(v.notices.map(function (n) { return n.number; }))
-        .concat(v.docs.map(function (d) { return d.des + ' ' + d.inv; }))
+        .concat(v.docs.map(docLine))
         .map(function (v) { return String(v == null ? '' : v).toLowerCase(); }).join(' ');
       return hay.indexOf(q) !== -1;
     });
@@ -1306,10 +1194,10 @@ function renderRegistry() {
   var table = document.createElement('table');
   table.className = 'reg-table';
   table.innerHTML =
-    '<colgroup><col style="width:30px"><col style="width:44px"><col style="width:84px"><col style="width:13%"><col style="width:8%"><col style="width:10%"><col style="width:8%"><col style="width:12%"><col style="width:10%"><col><col style="width:56px"></colgroup>' +
+    '<colgroup><col style="width:30px"><col style="width:44px"><col style="width:84px"><col style="width:13%"><col style="width:8%"><col style="width:10%"><col style="width:8%"><col style="width:10%"><col><col style="width:56px"></colgroup>' +
     '<thead><tr><th class="reg-dl-head" title="Скачать опись (PDF)">' + downloadSvg() + '</th><th>№</th><th>Дата</th><th style="text-align:left">Куда</th>' +
     '<th style="text-align:left">Изделие</th><th style="text-align:left">Обозначение</th><th style="text-align:left">Заказ</th>' +
-    '<th style="text-align:left" title="Customer_subscription.doc_filtered">Куплено</th><th style="text-align:left">Извещения</th>' +
+    '<th style="text-align:left">Извещения</th>' +
     '<th style="text-align:left">Документы</th><th></th></tr></thead><tbody></tbody>';
   var tbody = table.querySelector('tbody');
 
@@ -1335,11 +1223,6 @@ function renderRegistry() {
     var tdDest = document.createElement('td');
     tdDest.className = 'reg-dest';
     tdDest.textContent = r.Destination || '';
-    if (r.Destination) {
-      tdDest.appendChild(inlineField('addr:' + r.id, firmAddress(r.Destination),
-        { cls: 'reg-sub', multiline: true, placeholder: 'адрес не указан', title: 'Изменить адрес фирмы' },
-        function (val) { return saveFirmAddress(r.Destination, val); }));
-    }
     tr.appendChild(tdDest);
 
     function cell(text, cls) {
@@ -1357,7 +1240,6 @@ function renderRegistry() {
       sub.className = 'reg-sub'; sub.textContent = 'аванс ' + formatDate(v.order.advance);
       tdOrder.appendChild(sub);
     }
-    cell(v.boughtText, 'reg-bought');
 
     var tdNtc = cell('');
     var ntcWrap = document.createElement('div');
@@ -1371,21 +1253,7 @@ function renderRegistry() {
     tdNtc.appendChild(ntcWrap);
 
     var tdDocs = cell('');
-    v.docs.forEach(function (d) {
-      var line = document.createElement('span');
-      line.className = 'reg-doc';
-      line.title = d.name || '';
-      line.textContent = d.des;
-      var meta = document.createElement('span');
-      meta.className = 'reg-sub'; meta.textContent = docMeta(d);
-      line.appendChild(meta);
-      if (d.id != null && state.docsById[d.id]) {
-        line.appendChild(inlineField('sig:' + r.id + ':' + d.id, state.docsById[d.id].signature,
-          { cls: 'reg-sub', mono: true, prefix: 'MD5 ', placeholder: 'MD5 —', title: 'Изменить сигнатуру (MD5)' },
-          function (val) { return saveDocSignature(d.id, val); }));
-      }
-      tdDocs.appendChild(line);
-    });
+    v.docs.forEach(function (d) { tdDocs.appendChild(docLineEl(d)); });
 
     var tdActions = document.createElement('td');
     tdActions.className = 'reg-actions';
@@ -1443,7 +1311,7 @@ function editableRow(r) {
   frag.appendChild(tdDest);
   combo.refresh();
 
-  [cascade.productEl, cascade.dnEl, cascade.orderEl, cascade.boughtEl, cascade.noticesEl, cascade.docsEl].forEach(function (el) {
+  [cascade.productEl, cascade.dnEl, cascade.orderEl, cascade.noticesEl, cascade.docsEl].forEach(function (el) {
     var td = document.createElement('td');
     td.className = 'reg-left';
     td.appendChild(el);
@@ -1498,8 +1366,6 @@ function recordView(r) {
     return state.docsById[id] || { id: id, des: '#' + id, inv: '', sheets: null, version: null, name: '' };
   }) : [];
   return {
-    address: firmAddress(r.Destination) || r.Address || '',
-    boughtText: order ? order.docText : (r.OrderDocs || ''),
     docs: docs,
     order: order,
     orderText: order ? (order.contract || ('заказ #' + order.id)) : (typeof r.Order === 'string' ? r.Order : ''),
@@ -1708,9 +1574,41 @@ function buildOpisPart(kind, data, A) {
           f.updateAppearances(font, opisFitAppearance(f, m ? +m[1] : L.fontSize));
         });
         form.acroForm.dict.set(PDFName.of('NeedAppearances'), PDFLib.PDFBool.False);
+        opisFlattenExcept(form, /(^|_)(address|phone)$|_signature$/);
         return pdf;
       });
     });
+  });
+}
+
+// «Запекает» поля формы в содержимое листа (как PDFForm.flatten), кроме тех,
+// чьё имя подходит под keep, — они остаются редактируемыми. Пустые поля
+// просто убираются.
+function opisFlattenExcept(form, keep) {
+  var PDFLib = window.PDFLib;
+  form.getFields().forEach(function (f) {
+    if (keep.test(f.getName())) return;
+    var filled = !(f instanceof PDFLib.PDFTextField) || String(f.getText() || '').trim();
+    var pages = [];
+    f.acroField.getWidgets().forEach(function (w) {
+      var page = form.findWidgetPage(w);
+      if (pages.indexOf(page) === -1) pages.push(page);
+      if (!filled) return;
+      var key = page.node.newXObject('FlatWidget', form.findWidgetAppearanceRef(f, w));
+      var r = w.getRectangle();
+      page.pushOperators(PDFLib.pushGraphicsState(), PDFLib.translate(r.x, r.y),
+        PDFLib.drawObject(key), PDFLib.popGraphicsState());
+    });
+    // Не form.removeField: он снимает из /Annots только сам field.ref, и
+    // виджеты-Kids остаются висячими ссылками. Удаляем поле сами.
+    var refs = [f.ref];
+    var kids = f.acroField.normalizedEntries().Kids;
+    for (var k = 0; k < kids.size(); k++) {
+      if (kids.get(k) instanceof PDFLib.PDFRef) refs.push(kids.get(k));
+    }
+    refs.forEach(function (ref) { pages.forEach(function (pg) { pg.node.removeAnnot(ref); }); });
+    form.acroForm.removeField(f.acroField);
+    refs.forEach(function (ref) { form.doc.context.delete(ref); });
   });
 }
 
@@ -1794,10 +1692,10 @@ function buildOpisPdfBytes(data, A) {
     var out = pdfs[0];
     out.catalog.getOrCreateAcroForm().dict.set(PDFName.of('NeedAppearances'), PDFLib.PDFBool.False);
     if (pdfs.length === 1) return out.save();
-    // Склейка без «запекания»: у полей второй части те же имена шаблона
-    // (num, company, r1_…), поэтому переименовываем их с префиксом E_, копируем
+    // Склейка: у оставшихся полей второй части (адрес, телефон, сигнатуры) те
+    // же имена шаблона, поэтому переименовываем их с префиксом E_, копируем
     // листы вместе с виджетами и регистрируем скопированные поля в AcroForm
-    // первой части — все поля остаются редактируемыми.
+    // первой части — они остаются редактируемыми.
     var second = pdfs[1];
     second.getForm().getFields().forEach(function (f) { f.acroField.setPartialName('E_' + f.getName()); });
     return out.copyPages(second, second.getPageIndices()).then(function (pages) {
