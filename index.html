@@ -124,12 +124,39 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .ntc-all:hover{text-decoration:underline}
 .lock-btn{width:32px;padding:0}
 .lock-btn.off{background:var(--red-br)}
-.form-one-row{grid-template-columns:90px 122px 32px minmax(200px,1.5fr) minmax(160px,1fr) minmax(130px,.8fr) minmax(150px,1fr) auto;align-items:end}
+.form-one-row{grid-template-columns:90px 122px 32px minmax(180px,1.3fr) minmax(160px,1fr) minmax(160px,1.2fr) minmax(150px,1fr) auto;align-items:end}
+.form-docs{margin-top:10px}
+.ntc-chip.static{cursor:default}
+.ntc-chip.static:hover{background:var(--grn-bg)}
+.plan-dns .reg-doc{white-space:nowrap}
+/* ── План документов описи ── */
+.plan-box{border:1px solid var(--brd);border-radius:var(--r);background:#f7f7f7;padding:4px;max-height:320px;overflow-y:auto;font-size:11.5px}
+.plan-box.small{max-height:220px;font-size:10.5px;padding:3px}
+.plan-group{font-size:10px;font-weight:600;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;padding:6px 6px 3px}
+.plan-item{display:flex;align-items:center;gap:8px;padding:3px 6px;border-radius:4px;cursor:pointer;user-select:none;color:var(--tx2)}
+.plan-item:hover{background:var(--surf3)}
+.plan-item.on{color:var(--tx)}
+.plan-item.forced{cursor:default}
+.plan-check{flex-shrink:0;width:14px;height:14px;border:1px solid var(--brd2);border-radius:3px;background:#fff;display:inline-flex;align-items:center;justify-content:center;color:var(--grn)}
+.plan-item.on .plan-check{border-color:var(--grn-brd);background:var(--grn-bg)}
+.plan-doc{font-family:var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-tag{flex-shrink:0;margin-left:auto;font-size:10px;padding:1px 7px;border-radius:9px;background:var(--surf3);color:var(--tx3);white-space:nowrap}
+.plan-item.st-new .plan-tag{background:var(--grn-bg);color:var(--grn)}
+.plan-item.st-update .plan-tag{background:var(--acc-bg);color:var(--acc)}
+.plan-item.st-need{color:var(--red)}
+.plan-item.st-need .plan-check{border-color:var(--red)}
+.plan-item.st-need .plan-tag{background:var(--red-bg);color:var(--red)}
+.plan-item.st-actual{opacity:.7}
+.plan-foot{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:5px 6px 2px;font-size:10.5px;color:var(--tx3);border-top:1px solid var(--brd);margin-top:4px}
+.plan-foot .warn{color:var(--red);font-weight:600}
+.plan-more{color:var(--acc);cursor:pointer;margin-left:auto}
+.plan-more:hover{text-decoration:underline}
 .form-select.mono{font-family:var(--mono)}
 .reg-doc{display:block;font-family:var(--mono);font-size:10.5px;text-align:left}
 .reg-doc + .reg-doc{margin-top:3px}
 .reg-ntc{display:flex;flex-wrap:wrap;gap:3px}
 .reg-table td.reg-nowrap{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal;overflow-wrap:normal}
+.reg-lines{white-space:pre-line}
 .reg-left{text-align:left!important;word-break:break-word;overflow-wrap:anywhere}
 
 /* ── Столбец скачивания PDF (как в notification_numbers) ── */
@@ -188,12 +215,12 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
           <div id="fDestWrap"></div>
         </div>
         <div class="form-group">
-          <label class="form-label">Изделие</label>
-          <div id="fProductWrap"></div>
-        </div>
-        <div class="form-group">
           <label class="form-label">Заказ</label>
           <div id="fOrderWrap"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Изделия</label>
+          <div id="fProductWrap"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Извещения</label>
@@ -205,6 +232,10 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Зарегистрировать
           </button>
         </div>
+      </div>
+      <div class="form-group form-docs">
+        <label class="form-label">Документы</label>
+        <div id="fDocsWrap"></div>
       </div>
     </div>
   </div>
@@ -240,7 +271,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.11.0</footer>
+<footer class="ver-footer">v0.12.0</footer>
 
 <script>
 'use strict';
@@ -253,10 +284,12 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 // вебхуками с внешней системой, писать в неё нельзя).
 //
 // Каскад регистрации: фирма → действующий заказ (Customer_subscription,
-// service_end ≥ сегодня) → изделие заказа (децимальные номера из doc_filtered,
-// сопоставленные с Components.decimal_number) → свободные извещения
-// (Notice_of_change по этому изделию с даты аванса заказа, ещё не вошедшие ни
-// в одну опись). Пишем Order:Ref, Product:Ref, Notices:RefList.
+// service_end ≥ сегодня) → изделия заказа (децимальные номера из doc_filtered,
+// сопоставленные с Components.decimal_number; по умолчанию все) → план
+// документов: купленные документы этих изделий в последней версии на дату
+// описи минус то, что фирма уже получила (см. «План описи»). Извещения описи —
+// извещения отмеченных документов. Пишем Order:Ref, Products:RefList,
+// Notices:RefList, Documents:RefList; старая колонка Product только читается.
 // У этих Ref-колонок настроен displayCol, поэтому onRecords отдаёт в них
 // ТЕКСТ, а не id — настоящие id читаем отдельно через fetchTable своей таблицы
 // (state.rawById), см. refreshRawRefs.
@@ -276,13 +309,15 @@ var state = {
   firmsLoaded: false,
   orders: [],           // [{id, client, contract, advance, end, dns:[...]}]
   ordersById: {},
-  docsById: {},         // Inventory_book: id -> {des, inv, sheets, version, name}
+  docsById: {},         // Inventory_book: id -> {des, key, inv, sheets, version, date, root, name}
+  docsByKey: {},        // нормализованное обозначение -> все его версии
+  noticesByDocId: {},   // id версии документа -> [id извещений]
   addressByFirm: {},    // Firm_addresses: фирма (lower) -> адрес
   componentsById: {},   // id -> {id, name, dn, parent}
   componentByDn: {},    // decimal_number -> component (основное изделие)
   notices: [],          // [{id, number, date, dn, product}]
   noticesById: {},
-  rawById: {},          // id описи -> {order, product, notices:[...]} (числовые id)
+  rawById: {},          // id описи -> {dest, date, order, products, notices, documents} (числовые id)
   refsLoaded: false,
   regYearFilter: null,  // число года или null («Все»)
   editingId: null
@@ -411,20 +446,33 @@ function loadRefData() {
     });
     state.componentByDn = byDn;
 
-    var docs = {};
+    // Каждая версия документа — отдельная строка Inventory_book с тем же
+    // обозначением и своим ChangeNumber. root — основное изделие (верх цепочки
+    // primary_use), у строк без Product — по децимальному номеру обозначения.
+    var docs = {}, byKey = {};
     (ib.id || []).forEach(function (id, i) {
-      docs[id] = {
+      var des = ib.DocumentDesignation ? String(ib.DocumentDesignation[i] || '') : '';
+      var pid = ib.Product ? ib.Product[i] : 0;
+      var root = rootComponent(comps[pid]);
+      if (!root) { var dn0 = extractDns(des)[0]; root = dn0 && byDn[dn0] ? rootComponent(byDn[dn0]) : null; }
+      var d = docs[id] = {
         id: id,
-        des: ib.DocumentDesignation ? String(ib.DocumentDesignation[i] || '') : '',
+        des: des,
+        key: normDes(des),
         inv: ib.InventoryNumber ? String(ib.InventoryNumber[i] || '') : '',
         sheets: ib.Sheets ? ib.Sheets[i] : null,
         version: ib.ChangeNumber ? ib.ChangeNumber[i] : null,
-        product: ib.Product ? ib.Product[i] : 0,
+        date: ib.IssueDate ? ib.IssueDate[i] : null,
+        product: pid,
+        root: root ? root.id : 0,
         signature: ib.Signature ? String(ib.Signature[i] || '').trim() : '',
         name: ib.Name ? String(ib.Name[i] || '') : ''
       };
+      if (!d.key) return;
+      (byKey[d.key] = byKey[d.key] || []).push(d);
     });
     state.docsById = docs;
+    state.docsByKey = byKey;
 
     var orders = [];
     (ot.id || []).forEach(function (id, i) {
@@ -464,7 +512,11 @@ function loadRefData() {
     notices.sort(function (a, b) { return (a.date || 0) - (b.date || 0) || a.id - b.id; });
     state.notices = notices;
     state.noticesById = {};
-    notices.forEach(function (n) { state.noticesById[n.id] = n; });
+    state.noticesByDocId = {};
+    notices.forEach(function (n) {
+      state.noticesById[n.id] = n;
+      n.docs.forEach(function (did) { (state.noticesByDocId[did] = state.noticesByDocId[did] || []).push(n.id); });
+    });
 
     var addr = {};
     (at.id || []).forEach(function (id, i) {
@@ -476,9 +528,15 @@ function loadRefData() {
 
     var raw = {};
     (own.id || []).forEach(function (id, i) {
+      // Products (RefList) — изделия описи; старая колонка Product — запасной
+      // вариант для записей, где Products ещё пуст.
+      var products = own.Products ? decodeList(own.Products[i]) : [];
+      if (!products.length && own.Product && typeof own.Product[i] === 'number' && own.Product[i] > 0) products = [own.Product[i]];
       raw[id] = {
+        dest: own.Destination ? normFirm(own.Destination[i]) : '',
+        date: own.IssueDate ? own.IssueDate[i] : null,
         order: own.Order && typeof own.Order[i] === 'number' ? own.Order[i] : 0,
-        product: own.Product && typeof own.Product[i] === 'number' ? own.Product[i] : 0,
+        products: products,
         notices: own.Notices ? decodeList(own.Notices[i]) : [],
         documents: own.Documents ? decodeList(own.Documents[i]) : []
       };
@@ -508,59 +566,128 @@ function ordersForFirm(firm, keepId) {
   }).sort(function (a, b) { return (b.advance || 0) - (a.advance || 0); });
 }
 
-// Изделия из всех доступных заказов фирмы (без дублей).
-function productsForOrders(orders) {
-  var out = [];
-  orders.forEach(function (o) {
-    productsForOrder(o).forEach(function (c) { if (out.indexOf(c) === -1) out.push(c); });
-  });
-  return out.sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
-}
+// ---------- План описи: что из купленного отправлять фирме ----------
+//
+// Опись собирается от заказа: купленные документы выбранных изделий в
+// последней версии на дату описи сравниваются с тем, что фирма уже получила:
+//  · документы прошлых описей этой фирме (точные версии);
+//  · старые описи без списка документов, но с заказом — купленное по тому
+//    заказу в версиях на дату той описи;
+//  · закрытые оплаченные заказы фирмы (окончание обслуживания, а без него —
+//    дата аванса, раньше даты описи) — купленное в версиях на эту дату.
+// Подписка продлена — тот же пакет повторно не идёт, только новые версии и
+// новые документы. Последняя версия выше 0 без извещения — «нужно
+// извещение», опись с таким документом не регистрируется.
 
-function orderHasProduct(order, product) {
-  return !!(order && product && product.dn && order.dns.indexOf(product.dn) !== -1);
-}
-
+// Основные изделия заказа (по децимальным номерам из doc_filtered).
 function productsForOrder(order) {
   if (!order) return [];
   var out = [];
   order.dns.forEach(function (dn) {
-    var c = state.componentByDn[dn];
+    var c = rootComponent(state.componentByDn[dn]);
     if (c && out.indexOf(c) === -1) out.push(c);
+  });
+  return out.sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
+}
+
+// Нормализованные обозначения, купленные по заказу («КД» — все документы
+// изделий заказа).
+function orderDocKeys(order) {
+  if (!order) return [];
+  var roots = {};
+  if (order.allKd) productsForOrder(order).forEach(function (c) { roots[c.id] = true; });
+  return Object.keys(state.docsByKey).filter(function (k) {
+    if (order.bought[k]) return true;
+    return order.allKd && state.docsByKey[k].some(function (d) { return roots[d.root]; });
+  });
+}
+
+// Последняя версия документа, выпущенная не позже date (null — без ограничения).
+function versionAt(key, date) {
+  var best = null;
+  (state.docsByKey[key] || []).forEach(function (d) {
+    if (date != null && d.date != null && d.date > date) return;
+    if (!best || (d.version || 0) > (best.version || 0) || ((d.version || 0) === (best.version || 0) && d.id > best.id)) best = d;
+  });
+  return best;
+}
+
+// Что фирма уже получила: {sent: {обозначение: версия}, notices: {id: true}}.
+function firmSentVersions(firm, order, asOf, exceptId) {
+  var key = normFirm(firm).toLowerCase();
+  var sent = {}, notices = {};
+  function note(k, v) { v = v || 0; if (sent[k] == null || v > sent[k]) sent[k] = v; }
+  function noteOrder(o, date) {
+    orderDocKeys(o).forEach(function (k) { var d = versionAt(k, date); if (d) note(k, d.version); });
+  }
+  if (!key) return { sent: sent, notices: notices };
+  Object.keys(state.rawById).forEach(function (rid) {
+    var r = state.rawById[rid];
+    if (Number(rid) === exceptId || r.dest.toLowerCase() !== key) return;
+    if (asOf != null && r.date != null && r.date > asOf) return;
+    r.notices.forEach(function (nid) { notices[nid] = true; });
+    if (r.documents.length) {
+      r.documents.forEach(function (id) { var d = state.docsById[id]; if (d && d.key) note(d.key, d.version); });
+    } else if (state.ordersById[r.order]) {
+      noteOrder(state.ordersById[r.order], r.date);
+    }
+  });
+  var limit = asOf != null ? asOf : todayEpoch();
+  state.orders.forEach(function (o) {
+    if (o === order || o.client.toLowerCase() !== key || o.advance == null) return;
+    var closed = o.end != null ? o.end : o.advance;
+    if (closed < limit) noteOrder(o, closed);
+  });
+  return { sent: sent, notices: notices };
+}
+
+// Извещения на версии документа после отправленной (sent) до last включительно;
+// документ фирме не отправлялся — извещения, вышедшие с даты аванса заказа.
+function noticesForDoc(key, sent, last, order, taken) {
+  var out = [];
+  (state.docsByKey[key] || []).forEach(function (d) {
+    var v = d.version || 0;
+    if (v > last || (sent != null && v <= sent)) return;
+    (state.noticesByDocId[d.id] || []).forEach(function (nid) {
+      var n = state.noticesById[nid];
+      if (!n || taken[nid] || out.indexOf(nid) !== -1) return;
+      if (sent == null && (order.advance == null || n.date == null || n.date < order.advance)) return;
+      out.push(nid);
+    });
   });
   return out;
 }
 
-// Документы извещения, которые фирма купила по этому заказу.
-function boughtDocsOfNotice(order, notice) {
-  if (!order || !notice) return [];
-  return notice.docs.filter(function (id) {
-    var d = state.docsById[id];
-    return d && (order.allKd || order.bought[normDes(d.des)]);
+// Строки плана: {doc, root, sent, status, newDoc, notices}.
+// status: 'actual' — эта версия уже у фирмы; 'new' — фирме не отправлялся;
+// 'update' — вышла новая версия с извещением; 'need' — последняя версия без
+// извещения.
+function buildPlan(order, productIds, firm, asOf, exceptId) {
+  if (!order) return [];
+  var base = firmSentVersions(firm, order, asOf, exceptId);
+  var had = {};   // изделия, документы которых фирма уже получала
+  Object.keys(base.sent).forEach(function (k) {
+    var d = (state.docsByKey[k] || [])[0];
+    if (d) had[d.root] = true;
   });
-}
-
-// Извещения, уже отправленные по этому же заказу другими описями.
-function takenNoticeIds(exceptRecordId, orderId) {
-  var taken = {};
-  Object.keys(state.rawById).forEach(function (rid) {
-    var r = state.rawById[rid];
-    if (Number(rid) === exceptRecordId || r.order !== orderId) return;
-    r.notices.forEach(function (nid) { taken[nid] = true; });
+  var items = [];
+  orderDocKeys(order).forEach(function (k) {
+    var doc = versionAt(k, asOf);
+    if (!doc || productIds.indexOf(doc.root) === -1) return;
+    var last = doc.version || 0, sent = base.sent[k];
+    var it = { doc: doc, root: doc.root, sent: sent, newDoc: false, notices: [] };
+    if (sent != null && sent >= last) it.status = 'actual';
+    else {
+      it.status = last > 0 && !(state.noticesByDocId[doc.id] || []).length ? 'need' : (sent == null ? 'new' : 'update');
+      it.newDoc = sent == null && !!had[doc.root];
+      it.notices = noticesForDoc(k, sent, last, order, base.notices);
+    }
+    items.push(it);
   });
-  return taken;
-}
-
-function freeNotices(order, product, exceptRecordId, keepIds) {
-  if (!order || !product || !product.dn) return [];
-  var taken = takenNoticeIds(exceptRecordId, order.id);
-  var keep = {};
-  (keepIds || []).forEach(function (id) { keep[id] = true; });
-  return state.notices.filter(function (n) {
-    if (keep[n.id]) return true;
-    if (taken[n.id] || n.dn !== product.dn) return false;
-    if (order.advance == null || n.date == null || n.date < order.advance) return false;
-    return boughtDocsOfNotice(order, n).length > 0;
+  var rootName = function (id) { var c = state.componentsById[id]; return c ? c.name : ''; };
+  return items.sort(function (a, b) {
+    return rootName(a.root).localeCompare(rootName(b.root), 'ru') ||
+      String(a.doc.inv || a.doc.des).localeCompare(String(b.doc.inv || b.doc.des), 'ru', { numeric: true });
   });
 }
 
@@ -586,37 +713,43 @@ function docLineEl(d) {
   return el;
 }
 
-// Каскад «изделие (наименование ⇄ обозначение) → заказ → извещения →
-// документы». Элементы вставляет вызывающий код — в форму регистрации или в
-// ячейки редактируемой строки реестра. initial — {order, product, notices,
-// documents} текущей описи (её заказ показываем даже если он уже истёк, её
-// извещения и документы остаются в списке выбора).
+// Каскад «заказ → изделия → документы (→ извещения)». Элементы вставляет
+// вызывающий код — в форму регистрации или в ячейки редактируемой строки
+// реестра. initial — {order, products, notices, documents} текущей описи (её
+// заказ показываем даже если он уже истёк). asOf — дата описи: версии
+// документов берутся на эту дату.
+// Документы: в форме по умолчанию отмечено всё, что нужно отправить, ручные
+// правки запоминаются в picks; в строке реестра — ровно сохранённый список.
+// Извещения не выбираются — это извещения отмеченных документов.
 function createCascade(opts) {
   var small = !!opts.small;
-  var autoPick = !small; // в строке реестра ничего не подставляем сами
-  var exceptId = opts.recordId != null ? opts.recordId : null;
+  var edit = opts.recordId != null;
+  var exceptId = edit ? opts.recordId : null;
   var init = opts.initial || {};
   var firm = opts.firm || '';
-  var cur = {
-    order: init.order || 0, product: init.product || 0,
-    notices: (init.notices || []).slice(), documents: (init.documents || []).slice()
-  };
+  var asOf = opts.asOf != null ? opts.asOf : null;
   var keepOrderId = init.order || 0;
-  var initProductId = init.product || 0;
-  var keepNotices = (init.notices || []).slice();
+  var cur = { order: init.order || 0, products: (init.products || []).slice() };
+  var autoProducts = !cur.products.length;
+  var explicit = edit;
+  var picks = {};
+  (init.documents || []).forEach(function (id) { picks[id] = true; });
+  // Старая опись без списка документов: её извещения сохраняем как есть.
+  var keepNotices = edit && !(init.documents || []).length ? (init.notices || []).slice() : [];
+  var showSent = false;
+  var dirty = false;   // пользователь менял заказ/изделия/документы
+  var value = { order: 0, products: [], documents: [], notices: [], blockers: [], dirty: false };
 
-  function mkSelect() {
-    var s = document.createElement('select');
-    s.className = 'form-select' + (small ? ' small' : '');
-    return s;
-  }
-  var productSel = mkSelect();
-  var dnSel = mkSelect();
-  dnSel.classList.add('mono');
-  var orderSel = mkSelect();
-  var box = document.createElement('div');
-  box.className = 'ntc-box' + (small ? ' small' : '');
+  var orderSel = document.createElement('select');
+  orderSel.className = 'form-select' + (small ? ' small' : '');
+  var prodBox = document.createElement('div');
+  prodBox.className = 'ntc-box' + (small ? ' small' : '');
+  var dnBox = document.createElement('div');
+  dnBox.className = 'plan-dns';
+  var ntcBox = document.createElement('div');
+  ntcBox.className = 'ntc-box' + (small ? ' small' : '');
   var docBox = document.createElement('div');
+  docBox.className = 'plan-box' + (small ? ' small' : '');
 
   function fillSelect(sel, items, selected, placeholder, labelFn) {
     sel.innerHTML = '';
@@ -639,127 +772,199 @@ function createCascade(opts) {
     target.appendChild(h);
   }
 
-  function chip(text, sub, on, title, onClick) {
+  function chip(text, on, title, onClick) {
     var c = document.createElement('span');
-    c.className = 'ntc-chip' + (on ? ' on' : '');
+    c.className = 'ntc-chip' + (on ? ' on' : '') + (onClick ? '' : ' static');
     c.title = title;
-    c.appendChild(document.createTextNode(text));
-    if (sub) {
-      var d = document.createElement('span');
-      d.className = 'ntc-date'; d.textContent = sub;
-      c.appendChild(d);
-    }
-    c.addEventListener('click', onClick);
+    c.textContent = text;
+    if (onClick) c.addEventListener('click', onClick);
     return c;
   }
 
-  function allToggle(target, allOn, onClick) {
-    var a = document.createElement('span');
-    a.className = 'ntc-all';
-    a.textContent = allOn ? 'снять все' : 'выбрать все';
-    a.addEventListener('click', onClick);
-    target.appendChild(a);
+  function resetDocs() { picks = {}; explicit = false; keepNotices = []; showSent = false; }
+
+  function forced(it) { return !explicit && it.status === 'need'; }
+  function isOn(it) {
+    if (forced(it)) return true;
+    if (picks.hasOwnProperty(it.doc.id)) return picks[it.doc.id];
+    return !explicit && it.status !== 'actual';
   }
 
-  // Документы описи однозначно определяются заказом и извещениями —
-  // купленные документы выбранных извещений.
-  function docsOf(order) {
-    var out = [];
-    if (!order) return out;
-    cur.notices.forEach(function (nid) {
-      boughtDocsOfNotice(order, state.noticesById[nid]).forEach(function (id) { if (out.indexOf(id) === -1) out.push(id); });
-    });
-    return out;
+  function tagText(it) {
+    if (it.status === 'need') return 'нужно извещение на изм.' + (it.doc.version || 0) + (it.newDoc ? ' · новый документ' : '');
+    if (it.status === 'new') return it.newDoc ? 'новый документ' : '';
+    if (it.status === 'update') return 'было изм.' + it.sent;
+    if (it.status === 'actual') return 'отправлен';
+    return 'из описи';
+  }
+
+  function itemTitle(it) {
+    var s = it.doc.name || '';
+    if (it.status === 'need') s += (s ? '\n' : '') + 'Последняя версия не вошла ни в одно извещение — оформите извещение, без него опись не зарегистрировать.';
+    else if (it.status === 'actual') s += (s ? '\n' : '') + 'Эта версия уже отправлена фирме (изм.' + it.sent + ').';
+    else if (it.status === 'kept') s += (s ? '\n' : '') + 'Документ из сохранённой описи (не последняя версия или не из заказа).';
+    return s;
   }
 
   function render() {
-    var firmOrders = ordersForFirm(firm, keepOrderId);
-    var products = productsForOrders(firmOrders);
-    if (!products.some(function (p) { return p.id === cur.product; })) cur.product = (autoPick && products.length === 1) ? products[0].id : 0;
-    var noProducts = !firm ? 'Сначала выберите фирму' : (firmOrders.length ? (products.length ? '' : 'Нет изделий в заказах')
-      : (state.locked ? 'Нет действующих заказов' : 'Нет заказов'));
-    fillSelect(productSel, products, cur.product, noProducts || 'Наименование…', function (c) { return c.name; });
-    fillSelect(dnSel, products.slice().sort(function (a, b) { return a.dn.localeCompare(b.dn); }), cur.product,
-      noProducts ? '—' : 'Обозначение…', function (c) { return c.dn; });
-
-    var prod = state.componentsById[cur.product];
-    var orders = firmOrders.filter(function (o) { return orderHasProduct(o, prod); });
-    if (!orders.some(function (o) { return o.id === cur.order; })) cur.order = (autoPick || cur.product !== initProductId) && orders.length === 1 ? orders[0].id : 0;
-    fillSelect(orderSel, orders, cur.order, !prod ? '—' : 'Выберите заказ…', orderLabel);
+    var orders = ordersForFirm(firm, keepOrderId);
+    if (!orders.some(function (o) { return o.id === cur.order; })) {
+      cur.order = (!edit && orders.length === 1) ? orders[0].id : 0;
+      cur.products = []; autoProducts = true; resetDocs();
+    }
+    fillSelect(orderSel, orders, cur.order, !firm ? 'Сначала выберите фирму'
+      : orders.length ? 'Выберите заказ…' : (state.locked ? 'Нет действующих заказов' : 'Нет заказов'), orderLabel);
     var order = state.ordersById[cur.order];
     if (order && order.docText) orderSel.title = orderLabel(order) + '\nКуплено: ' + order.docText;
 
-    var list = freeNotices(order, prod, exceptId, keepNotices);
-    var allowed = {};
-    list.forEach(function (n) { allowed[n.id] = true; });
-    cur.notices = cur.notices.filter(function (id) { return allowed[id]; });
+    // Изделия заказа — по умолчанию все.
+    var products = productsForOrder(order);
+    var pids = products.map(function (c) { return c.id; });
+    cur.products = cur.products.filter(function (id) { return pids.indexOf(id) !== -1; });
+    if (autoProducts && !cur.products.length) cur.products = pids.slice();
+    prodBox.innerHTML = '';
+    if (!order) hint(prodBox, '—');
+    else if (!products.length) hint(prodBox, 'Нет изделий в заказе');
+    else products.forEach(function (c) {
+      var on = cur.products.indexOf(c.id) !== -1;
+      prodBox.appendChild(chip(c.name, on, c.dn, function () {
+        autoProducts = false; dirty = true;
+        if (on) cur.products.splice(cur.products.indexOf(c.id), 1);
+        else cur.products.push(c.id);
+        render(); changed();
+      }));
+    });
+    dnBox.innerHTML = '';
+    products.forEach(function (c) {
+      if (cur.products.indexOf(c.id) === -1) return;
+      var s = document.createElement('span');
+      s.className = 'reg-doc'; s.textContent = c.dn;
+      dnBox.appendChild(s);
+    });
 
-    box.innerHTML = '';
-    if (!prod) hint(box, 'Выберите изделие');
-    else if (!order) hint(box, 'Выберите заказ');
-    else if (!order.advance) hint(box, 'У заказа нет даты аванса');
-    else if (!list.length) hint(box, 'Нет извещений с купленными документами с ' + formatDate(order.advance));
-    else {
-      list.forEach(function (n) {
-        var on = cur.notices.indexOf(n.id) !== -1;
-        box.appendChild(chip(n.number, formatDate(n.date), on, n.product + ' · ' + formatDate(n.date), function () {
-          // Включили извещение — сразу отмечаем его купленные документы;
-          // выключили — убираем документы, которых нет в других выбранных.
-          if (on) cur.notices.splice(cur.notices.indexOf(n.id), 1);
-          else cur.notices.push(n.id);
-          render(); changed();
-        }));
-      });
-      if (list.length > 1) {
-        var allOn = cur.notices.length === list.length;
-        allToggle(box, allOn, function () {
-          cur.notices = allOn ? [] : list.map(function (n) { return n.id; });
-          render(); changed();
-        });
-      }
-    }
+    // Документы: план по заказу + документы сохранённой описи вне плана.
+    var plan = buildPlan(order, cur.products, firm, asOf, exceptId);
+    var inPlan = {};
+    plan.forEach(function (it) { inPlan[it.doc.id] = true; });
+    if (explicit) Object.keys(picks).forEach(function (id) {
+      var d = state.docsById[id];
+      if (picks[id] && d && !inPlan[d.id]) plan.push({ doc: d, root: d.root, status: 'kept', notices: [] });
+    });
 
-    cur.documents = docsOf(order);
+    var selected = plan.filter(isOn);
+    var notices = keepNotices.slice();
+    selected.forEach(function (it) {
+      it.notices.forEach(function (nid) { if (notices.indexOf(nid) === -1) notices.push(nid); });
+    });
+    notices.sort(function (a, b) {
+      var na = state.noticesById[a] || {}, nb = state.noticesById[b] || {};
+      return (na.date || 0) - (nb.date || 0) || a - b;
+    });
+    value = {
+      order: cur.order,
+      products: cur.products.slice(),
+      documents: selected.map(function (it) { return it.doc.id; }),
+      notices: notices,
+      blockers: selected.filter(function (it) { return it.status === 'need'; }).map(function (it) { return docLine(it.doc); }),
+      dirty: dirty
+    };
+
+    ntcBox.innerHTML = '';
+    if (!order) hint(ntcBox, '—');
+    else if (!notices.length) hint(ntcBox, 'Без извещений');
+    else notices.forEach(function (nid) {
+      var n = state.noticesById[nid] || { number: '#' + nid };
+      ntcBox.appendChild(chip(n.number, true, (n.product || '') + (n.date ? ' · ' + formatDate(n.date) : ''), null));
+    });
+
     docBox.innerHTML = '';
-    if (!cur.notices.length) hint(docBox, 'Выберите извещение');
-    else if (!cur.documents.length) hint(docBox, 'Нет купленных документов');
-    else cur.documents.forEach(function (id) { docBox.appendChild(docLineEl(state.docsById[id])); });
+    if (!order) { hint(docBox, firm ? 'Выберите заказ' : 'Сначала выберите фирму'); return; }
+    if (!cur.products.length) { hint(docBox, 'Выберите изделие'); return; }
+    if (!plan.length) { hint(docBox, 'Нет купленных документов'); return; }
+
+    var hidden = 0, lastRoot = null, multi = cur.products.length > 1 || plan.some(function (it) { return it.root !== plan[0].root; });
+    plan.forEach(function (it) {
+      var on = isOn(it);
+      if (it.status === 'actual' && !on && !showSent) { hidden++; return; }
+      if (multi && it.root !== lastRoot) {
+        lastRoot = it.root;
+        var g = document.createElement('div');
+        g.className = 'plan-group';
+        g.textContent = (state.componentsById[it.root] || {}).name || 'Без изделия';
+        docBox.appendChild(g);
+      }
+      var row = document.createElement('div');
+      row.className = 'plan-item st-' + it.status + (on ? ' on' : '') + (forced(it) ? ' forced' : '');
+      row.title = itemTitle(it);
+      var box = document.createElement('span');
+      box.className = 'plan-check';
+      box.innerHTML = on ? checkSvg() : '';
+      row.appendChild(box);
+      var txt = document.createElement('span');
+      txt.className = 'plan-doc'; txt.textContent = docLine(it.doc);
+      row.appendChild(txt);
+      var t = tagText(it);
+      if (t) {
+        var tag = document.createElement('span');
+        tag.className = 'plan-tag'; tag.textContent = t;
+        row.appendChild(tag);
+      }
+      if (!forced(it)) row.addEventListener('click', function () {
+        picks[it.doc.id] = !on; dirty = true;
+        render(); changed();
+      });
+      docBox.appendChild(row);
+    });
+
+    var foot = document.createElement('div');
+    foot.className = 'plan-foot';
+    var cnt = document.createElement('span');
+    cnt.textContent = 'В описи: ' + value.documents.length;
+    foot.appendChild(cnt);
+    if (value.blockers.length) {
+      var w = document.createElement('span');
+      w.className = 'warn';
+      w.textContent = 'Нужно извещение: ' + value.blockers.length + ' — опись не зарегистрировать';
+      foot.appendChild(w);
+    }
+    var sentCount = plan.filter(function (it) { return it.status === 'actual' && !isOn(it); }).length;
+    if (sentCount) {
+      var more = document.createElement('span');
+      more.className = 'plan-more';
+      more.textContent = showSent ? 'скрыть отправленные' : 'показать отправленные (' + sentCount + ')';
+      more.addEventListener('click', function () { showSent = !showSent; render(); });
+      foot.appendChild(more);
+    }
+    docBox.appendChild(foot);
   }
 
   function changed() { if (opts.onChange) opts.onChange(); }
 
-  function onProduct(sel) {
-    sel.addEventListener('change', function () {
-      cur.product = Number(sel.value) || 0; cur.order = 0; cur.notices = []; cur.documents = [];
-      render(); changed();
-    });
-  }
-  onProduct(productSel);
-  onProduct(dnSel);
   orderSel.addEventListener('change', function () {
-    cur.order = Number(orderSel.value) || 0; cur.notices = []; cur.documents = [];
+    cur.order = Number(orderSel.value) || 0; cur.products = []; autoProducts = true; resetDocs(); dirty = true;
     render(); changed();
   });
 
   render();
 
   return {
-    productEl: productSel,
-    dnEl: dnSel,
     orderEl: orderSel,
-    noticesEl: box,
+    productsEl: prodBox,
+    dnEl: dnBox,
+    noticesEl: ntcBox,
     docsEl: docBox,
     setFirm: function (f) {
       if (normFirm(f) === normFirm(firm)) return;
-      firm = f || ''; cur = { order: 0, product: 0, notices: [], documents: [] };
+      firm = f || ''; cur = { order: 0, products: [] }; autoProducts = true; resetDocs();
       render(); changed();
     },
-    getValue: function () {
-      return { order: cur.order, product: cur.product, notices: cur.notices.slice(), documents: cur.documents.slice() };
+    setAsOf: function (d) {
+      if (d === asOf) return;
+      asOf = d; render(); changed();
     },
+    getValue: function () { return value; },
     reset: function () {
-      cur = { order: 0, product: 0, notices: [], documents: [] };
-      keepOrderId = 0; initProductId = 0; keepNotices = [];
+      cur = { order: 0, products: [] }; autoProducts = true; keepOrderId = 0; resetDocs(); dirty = false;
       render(); changed();
     },
     refresh: render
@@ -1026,12 +1231,17 @@ function updateNumberPreview() {
 
 var fDate = document.getElementById('fDate');
 fDate.value = dateToInputValue(Math.floor(Date.now() / 1000));
-fDate.addEventListener('change', function () { updateNumberPreview(); syncRegisterBtn(); });
+fDate.addEventListener('change', function () {
+  updateNumberPreview();
+  formCascade.setAsOf(inputValueToDate(fDate.value));
+  syncRegisterBtn();
+});
 
-var formCascade = createCascade({ onChange: function () { syncRegisterBtn(); } });
-document.getElementById('fProductWrap').appendChild(formCascade.productEl);
+var formCascade = createCascade({ asOf: inputValueToDate(fDate.value), onChange: function () { syncRegisterBtn(); } });
 document.getElementById('fOrderWrap').appendChild(formCascade.orderEl);
+document.getElementById('fProductWrap').appendChild(formCascade.productsEl);
 document.getElementById('fNoticesWrap').appendChild(formCascade.noticesEl);
+document.getElementById('fDocsWrap').appendChild(formCascade.docsEl);
 
 var formFirmCombo = createFirmCombo('', false, function (v) { formCascade.setFirm(v); syncRegisterBtn(); });
 document.getElementById('fDestWrap').appendChild(formFirmCombo.el);
@@ -1067,22 +1277,35 @@ syncLockBtn();
 
 var btnRegister = document.getElementById('btnRegister');
 var registering = false;
-function syncRegisterBtn() {
+// Почему опись нельзя зарегистрировать ('' — можно).
+function registerBlocker() {
   var c = formCascade.getValue();
-  btnRegister.disabled = registering || !state.recordsLoaded || !state.refsLoaded || !fDate.value ||
-    !formFirmCombo.getValue() || !c.order || !c.product || !c.notices.length || !c.documents.length;
+  if (!state.recordsLoaded || !state.refsLoaded) return 'Данные загружаются';
+  if (!fDate.value) return 'Укажите дату';
+  if (!formFirmCombo.getValue()) return 'Выберите место отправки';
+  if (!c.order) return 'Выберите заказ';
+  if (!c.products.length) return 'Выберите изделие';
+  if (!c.documents.length) return 'Нет документов для описи';
+  if (c.blockers.length) return 'Нужно извещение на документы:\n' + c.blockers.join('\n');
+  return '';
+}
+
+function syncRegisterBtn() {
+  var why = registerBlocker();
+  btnRegister.disabled = registering || !!why;
+  btnRegister.title = why;
 }
 
 btnRegister.addEventListener('click', function () {
   var year = currentFormYear();
   var dest = formFirmCombo.getValue();
   var c = formCascade.getValue();
-  if (!year || !dest || !c.order || !c.product || !c.notices.length || !c.documents.length) return;
+  if (!year || registerBlocker()) return;
   var fields = {
     IssueDate: inputValueToDate(fDate.value),
     Destination: dest,
     Order: c.order,
-    Product: c.product,
+    Products: ['L'].concat(c.products),
     Notices: ['L'].concat(c.notices),
     Documents: ['L'].concat(c.documents)
   };
@@ -1235,8 +1458,8 @@ function renderRegistry() {
       tr.appendChild(td);
       return td;
     }
-    cell(v.productText);
-    cell(v.dnText, 'reg-left mono reg-nowrap');
+    cell(v.productText, 'reg-left reg-lines');
+    cell(v.dnText, 'reg-left mono reg-lines');
     cell(v.orderText);
 
     var tdNtc = cell('');
@@ -1298,11 +1521,13 @@ function editableRow(r) {
   tdDest.className = 'reg-dest';
   // «Куда» при редактировании не меняется — только показываем.
   tdDest.textContent = r.Destination || '';
-  var raw = state.rawById[r.id] || { order: 0, product: 0, notices: [], documents: [] };
-  var cascade = createCascade({ small: true, recordId: r.id, firm: r.Destination || '', initial: raw });
+  var raw = state.rawById[r.id] || { order: 0, products: [], notices: [], documents: [] };
+  var cascade = createCascade({ small: true, recordId: r.id, firm: r.Destination || '', initial: raw,
+    asOf: r.IssueDate != null ? r.IssueDate : null });
+  inDate.addEventListener('change', function () { cascade.setAsOf(inputValueToDate(inDate.value)); });
   frag.appendChild(tdDest);
 
-  [cascade.productEl, cascade.dnEl, cascade.orderEl, cascade.noticesEl, cascade.docsEl].forEach(function (el) {
+  [cascade.productsEl, cascade.dnEl, cascade.orderEl, cascade.noticesEl, cascade.docsEl].forEach(function (el) {
     var td = document.createElement('td');
     td.className = 'reg-left';
     td.appendChild(el);
@@ -1312,17 +1537,25 @@ function editableRow(r) {
   var saveBtn = iconButton('cell-edit-btn save', checkSvg(), 'Сохранить');
   saveBtn.addEventListener('click', function () {
     var c = cascade.getValue();
-    if (c.product && (!c.order || !c.notices.length || !c.documents.length)) {
-      window.alert('Выберите заказ, извещение и хотя бы один документ (или очистите изделие).');
-      return;
+    var fields = { IssueDate: inputValueToDate(inDate.value) };
+    // Заказ/изделия/документы не трогали — пишем только дату: у старых описей
+    // не затираем извещения и документы.
+    if (c.dirty) {
+      if (c.order && (!c.products.length || !c.documents.length)) {
+        window.alert('Выберите изделие и хотя бы один документ (или очистите заказ).');
+        return;
+      }
+      if (c.blockers.length) {
+        window.alert('Нужно извещение на документы:\n' + c.blockers.join('\n'));
+        return;
+      }
+      fields.Order = c.order || 0;
+      if (c.order) {
+        fields.Products = ['L'].concat(c.products);
+        fields.Notices = ['L'].concat(c.notices);
+        fields.Documents = ['L'].concat(c.documents);
+      }
     }
-    var fields = {
-      IssueDate: inputValueToDate(inDate.value),
-      Order: c.order || 0,
-      Product: c.order ? c.product : 0,
-      Notices: c.order ? ['L'].concat(c.notices) : null,
-      Documents: c.order ? ['L'].concat(c.documents) : null
-    };
     saveBtn.disabled = true;
     grist.selectedTable.update({ id: r.id, fields: fields }).then(function () {
       state.editingId = null;
@@ -1342,7 +1575,7 @@ function editableRow(r) {
 function recordView(r) {
   var raw = state.rawById[r.id];
   var order = raw ? state.ordersById[raw.order] : null;
-  var comp = raw ? state.componentsById[raw.product] : null;
+  var comps = raw ? raw.products.map(function (id) { return state.componentsById[id]; }).filter(Boolean) : [];
   var notices = raw ? raw.notices.map(function (id) {
     return state.noticesById[id] || { id: id, number: '#' + id };
   }) : [];
@@ -1353,8 +1586,8 @@ function recordView(r) {
     docs: docs,
     order: order,
     orderText: order ? (order.contract || ('заказ #' + order.id)) : (typeof r.Order === 'string' ? r.Order : ''),
-    productText: comp ? comp.name : (typeof r.Product === 'string' ? r.Product : ''),
-    dnText: comp ? comp.dn : (r.DecimalNumber || ''),
+    productText: comps.length ? comps.map(function (c) { return c.name; }).join('\n') : '',
+    dnText: comps.length ? comps.map(function (c) { return c.dn; }).join('\n') : (r.DecimalNumber || ''),
     notices: notices
   };
 }
@@ -1622,7 +1855,7 @@ function opisGroupRows(items) {
 }
 
 function gatherOpisData(r) {
-  var raw = state.rawById[r.id] || { order: 0, product: 0, notices: [], documents: [] };
+  var raw = state.rawById[r.id] || { order: 0, products: [], notices: [], documents: [] };
   var copies = opisGroupRows(raw.notices.map(function (id) {
     var n = state.noticesById[id] || { number: '#' + id, product: '' };
     return { product: n.product, sortKey: (n.date || 0) + ' ' + n.number,
@@ -1636,7 +1869,10 @@ function gatherOpisData(r) {
   }));
   var products = [];
   copies.concat(edocs).forEach(function (row) { if (row.group && products.indexOf(row.group) === -1) products.push(row.group); });
-  if (!products.length && raw.product) { var pn = opisProductName(raw.product); if (pn) products.push(pn); }
+  if (!products.length) raw.products.forEach(function (pid) {
+    var pn = opisProductName(pid);
+    if (pn && products.indexOf(pn) === -1) products.push(pn);
+  });
   products.sort(function (a, b) { return a.localeCompare(b, 'ru', { numeric: true }); });
   var year = dateToYear(r.IssueDate) || '';
   var product = products.join(' / ');
