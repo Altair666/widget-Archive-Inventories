@@ -225,7 +225,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.2.0</footer>
+<footer class="ver-footer">v0.2.1</footer>
 
 <script>
 'use strict';
@@ -430,6 +430,7 @@ function loadRefData() {
     state.rawById = raw;
     state.refsLoaded = true;
 
+    formFirmCombo.refresh();
     formCascade.refresh();
     syncRegisterBtn();
     renderRegistry();
@@ -661,11 +662,28 @@ function loadFirms() {
   });
 }
 
-function findFirm(text) {
+// Только фирмы, у которых есть действующий заказ. keep — текущее значение
+// строки редактирования: остаётся в списке, даже если заказов у фирмы уже нет.
+function activeFirms(keep) {
+  var active = {};
+  state.orders.forEach(function (o) { if (isActiveOrder(o)) active[o.client.toLowerCase()] = true; });
+  var keepName = normFirm(keep);
+  var keepKey = keepName.toLowerCase();
+  var out = state.firms.filter(function (f) {
+    var k = f.toLowerCase();
+    return active[k] || (keepKey && k === keepKey);
+  });
+  // Старое значение может быть фирмой не из Tu_accounting (ООО Авесто и т.п.).
+  if (keepKey && !out.some(function (f) { return f.toLowerCase() === keepKey; })) out.unshift(keepName);
+  return out;
+}
+
+function findFirm(text, list) {
   var key = normFirm(text).toLowerCase();
   if (!key) return null;
-  for (var i = 0; i < state.firms.length; i++) {
-    if (state.firms[i].toLowerCase() === key) return state.firms[i];
+  list = list || state.firms;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].toLowerCase() === key) return list[i];
   }
   return null;
 }
@@ -675,6 +693,8 @@ function findFirm(text) {
 // произвольный текст не сохраняется.
 function createFirmCombo(initialValue, small, onChange) {
   var value = initialValue || '';
+  var keep = initialValue || '';
+  function list() { return activeFirms(keep); }
   var hlIndex = -1;
   var matches = [];
 
@@ -700,13 +720,15 @@ function createFirmCombo(initialValue, small, onChange) {
     var q = normFirm(input.value).toLowerCase();
     // Пока текст совпадает с выбранным значением — показываем весь список.
     if (value && q === value.toLowerCase()) q = '';
-    matches = state.firms.filter(function (f) { return !q || f.toLowerCase().indexOf(q) !== -1; });
+    var all = list();
+    matches = all.filter(function (f) { return !q || f.toLowerCase().indexOf(q) !== -1; });
     if (hlIndex >= matches.length) hlIndex = matches.length - 1;
     dropdown.innerHTML = '';
     if (!matches.length) {
       var empty = document.createElement('div');
       empty.className = 'firm-option-empty';
-      empty.textContent = 'Ничего не найдено';
+      empty.textContent = !state.refsLoaded ? 'Загрузка заказов…'
+        : all.length ? 'Ничего не найдено' : 'Нет фирм с действующими заказами';
       dropdown.appendChild(empty);
       return;
     }
@@ -767,7 +789,7 @@ function createFirmCombo(initialValue, small, onChange) {
   input.addEventListener('focus', function () { hlIndex = -1; open(); input.select(); });
   input.addEventListener('input', function () {
     hlIndex = matches.length ? 0 : -1;
-    var exact = findFirm(input.value);
+    var exact = findFirm(input.value, list());
     value = exact || '';
     if (onChange) onChange(value);
     open();
@@ -781,7 +803,7 @@ function createFirmCombo(initialValue, small, onChange) {
   });
   input.addEventListener('blur', function () {
     close();
-    var exact = findFirm(input.value);
+    var exact = findFirm(input.value, list());
     if (exact) { if (exact !== input.value) setValue(exact); }
     else input.classList.toggle('invalid', !!normFirm(input.value));
   });
