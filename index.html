@@ -256,7 +256,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.7.0</footer>
+<footer class="ver-footer">v0.8.0</footer>
 
 <script>
 'use strict';
@@ -1542,8 +1542,8 @@ function loadOpisAssets() {
 
 // Раскладка строк по листам. Последний лист должен вместить подписи; иначе хвост уезжает на новый лист.
 // Строка-группа (название изделия) не остаётся последней на листе — уходит вместе со своими документами.
-// Строка-группа — двухстрочная (L.groupRow), остальные — L.row.
-function opisRowHeight(L, row) { return row.group ? (L.groupRow || L.row) : L.row; }
+// Строка-группа (изделие) — L.row; строка документа — lay.docRow (в описи эл. документов двухстрочная).
+function opisRowHeight(L, lay, row) { return row.group ? L.row : (lay.docRow || L.row); }
 
 function opisPaginate(L, rows, lay) {
   var signH = L.sign.gap + 2 * L.sign.line;
@@ -1552,7 +1552,7 @@ function opisPaginate(L, rows, lay) {
   while (true) {
     var room = L.bottom - (pages.length ? lay.topA : lay.top1) + 1e-6;
     var sum = 0, j = i;
-    while (j < rows.length && sum + opisRowHeight(L, rows[j]) <= room) { sum += opisRowHeight(L, rows[j]); j++; }
+    while (j < rows.length && sum + opisRowHeight(L, lay, rows[j]) <= room) { sum += opisRowHeight(L, lay, rows[j]); j++; }
     if (j === rows.length && sum + signH <= room) { pages.push(rows.slice(i)); break; }
     if (j === rows.length) j--;                          // подписи не влезли — хвост на следующий лист
     while (j - i > 1 && rows[j - 1].group) j--;
@@ -1670,12 +1670,12 @@ function buildOpisPart(kind, data, A) {
           var y = si ? lay.topA : lay.top1;
           rows.forEach(function (row) {
             n++;
-            var h = opisRowHeight(L, row);
+            var h = opisRowHeight(L, lay, row);
             xs.forEach(function (x) { line(page, x, y, x, y + h); });
             line(page, xs[0], y + h, xs[xs.length - 1], y + h);
             lay.keys.forEach(function (k, j) {
               var v = row.group ? (k === 'designation' ? row.group : '') : row[k];
-              addField(page, 'r' + n + '_' + k, xs[j], y, lay.cols[j], h, v, lay.cols[j] > 16 ? L.fontSize : 10, 1, !!row.group);
+              addField(page, 'r' + n + '_' + k, xs[j], y, lay.cols[j], h, v, lay.cols[j] > 16 ? L.fontSize : 10, 1, h > L.row);
             });
             y += h;
           });

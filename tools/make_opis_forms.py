@@ -192,8 +192,7 @@ def table_head(s, y, cols, head, head_h):
 SIGN = {"gap": 8, "line": LINE, "underline": 4.3, "name_to": 88.2, "sign": [92.5, 120.6], "date": [130, 152],
         "rows": [["Составил", "compiled"], ["Получил", "received"]]}
 SIGN_H = SIGN["gap"] + 2 * LINE
-# groupRow — высота строки-заголовка группы (изделие), две строки текста.
-LAYOUT = {"mm": MM, "fontSize": FS, "x0": X0, "bottom": BOTTOM, "row": ROW, "groupRow": 2 * ROW, "sign": SIGN}
+LAYOUT = {"mm": MM, "fontSize": FS, "x0": X0, "bottom": BOTTOM, "row": ROW, "sign": SIGN}
 
 
 # ---------- опись копий ----------
@@ -347,9 +346,11 @@ def build(maker, name):
 if __name__ == "__main__":
     for src, dst in FORM_FONTS.values():
         make_subset(src, dst)
-    for kind, cols, keys, (f1, fa) in [("copies", COPIES_COLS, COPIES_KEYS, (copies_1, copies_1a)),
-                                       ("edocs", EDOCS_COLS, EDOCS_KEYS, (edocs_1, edocs_1a))]:
-        LAYOUT[kind] = {"cols": [round(c, 2) for c in cols], "keys": keys,
+    # docRow — высота строки документа; в описи эл. документов двухстрочная (под MD5),
+    # строка-группа (изделие) всегда однострочная (row).
+    for kind, cols, keys, (f1, fa), doc_row in [("copies", COPIES_COLS, COPIES_KEYS, (copies_1, copies_1a), ROW),
+                                                ("edocs", EDOCS_COLS, EDOCS_KEYS, (edocs_1, edocs_1a), 2 * ROW)]:
+        LAYOUT[kind] = {"cols": [round(c, 2) for c in cols], "keys": keys, "docRow": doc_row,
                         "top1": build(f1, f"opis_{kind}_1.pdf"), "topA": build(fa, f"opis_{kind}_1a.pdf")}
     with open(os.path.join(OUT, "opis_layout.json"), "w", encoding="utf-8") as f:
         json.dump(LAYOUT, f, ensure_ascii=False, indent=1)

@@ -4,7 +4,6 @@
  "x0": 30,
  "bottom": 277,
  "row": 5,
- "groupRow": 10,
  "sign": {
   "gap": 8,
   "line": 5.1,
@@ -40,6 +39,7 @@
    "sheets",
    "copies"
   ],
+  "docRow": 5,
   "top1": 86.3,
   "topA": 38.1
  },
@@ -60,6 +60,7 @@
    "sheets",
    "copies"
   ],
+  "docRow": 10,
   "top1": 121.8,
   "topA": 41.6
  }
