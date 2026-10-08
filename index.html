@@ -101,6 +101,34 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .reg-filter-input:focus{border-color:var(--acc)}
 .reg-filter-icon{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--tx3);pointer-events:none}
 
+/* ── Каскад «заказ → изделие → извещения» ── */
+.form-select{height:32px;width:100%;border:1px solid var(--brd);border-radius:var(--r);background:#f7f7f7 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239E9C94' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center;padding:0 26px 0 9px;font-family:inherit;font-size:12px;color:var(--tx);outline:none;-webkit-appearance:none;appearance:none;cursor:pointer;transition:border-color .15s,background-color .15s;text-overflow:ellipsis}
+.form-select:focus{border-color:var(--acc);background-color:var(--surf)}
+.form-select:disabled{color:var(--tx3);cursor:not-allowed}
+.form-select.small{height:26px;font-size:11px;padding:0 22px 0 6px;background-position:right 5px center}
+.ntc-box{display:flex;flex-wrap:wrap;align-items:center;gap:5px;min-height:32px;border:1px solid var(--brd);border-radius:var(--r);background:#f7f7f7;padding:4px 6px}
+.ntc-box.small{min-height:26px;padding:3px 4px;gap:4px}
+.ntc-hint{font-size:11px;color:var(--tx3);padding:0 3px}
+.ntc-chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:10px;background:var(--surf3);color:var(--tx2);cursor:pointer;border:1px solid transparent;white-space:nowrap;user-select:none;transition:all .12s}
+.ntc-chip:hover{background:var(--brd2)}
+.ntc-chip.on{background:var(--grn-bg);color:var(--grn);border-color:var(--grn-brd)}
+.ntc-chip .ntc-date{color:var(--tx3)}
+.ntc-chip.on .ntc-date{color:var(--grn)}
+.ntc-all{font-size:10px;color:var(--acc);cursor:pointer;margin-left:auto;padding:0 4px;user-select:none;white-space:nowrap}
+.ntc-all:hover{text-decoration:underline}
+.reg-ntc{display:flex;flex-wrap:wrap;gap:3px}
+.reg-left{text-align:left!important;word-break:break-word;overflow-wrap:anywhere}
+.reg-sub{display:block;font-family:var(--mono);font-size:10px;color:var(--tx3)}
+
+/* ── Столбец скачивания PDF (как в notification_numbers) ── */
+.reg-dl,.reg-dl-head{white-space:nowrap;text-align:center!important;padding-left:0!important;padding-right:0!important}
+.reg-dl-head{color:var(--red-br)}
+.reg-dl-head svg{display:block;margin:0 auto}
+.reg-dl-wrap{display:flex;align-items:center;justify-content:center;width:100%}
+.dl-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid transparent;border-radius:4pt;background:transparent;color:var(--red-br);cursor:pointer;flex-shrink:0;transition:all .1s;padding:0}
+.dl-btn:hover{background:var(--red-bg);color:var(--red-br);border-color:var(--red-brd)}
+.dl-btn:disabled{color:var(--tx3);opacity:.6;cursor:not-allowed;background:transparent;border-color:transparent}
+
 .reg-actions{white-space:nowrap}
 .cell-edit-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid transparent;border-radius:4pt;background:transparent;color:#E07B1F;cursor:pointer;flex-shrink:0;transition:all .1s;padding:0}
 .cell-edit-btn:hover{background:#FFF4E6;color:#C5651A;border-color:#F5D4A0}
@@ -149,6 +177,20 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
           </button>
         </div>
       </div>
+      <div class="form-row" style="grid-template-columns:270px 260px 1fr;margin-top:10px">
+        <div class="form-group">
+          <label class="form-label">Заказ</label>
+          <div id="fOrderWrap"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Изделие</label>
+          <div id="fProductWrap"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Извещения</label>
+          <div id="fNoticesWrap"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -170,7 +212,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
     <div class="reg-filter-bar">
       <div class="reg-filter-wrap">
         <svg class="reg-filter-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input class="reg-filter-input" id="regFilterInput" placeholder="Фильтр по номеру, дате, месту отправки…" oninput="renderRegistry()">
+        <input class="reg-filter-input" id="regFilterInput" placeholder="Фильтр по номеру, дате, фирме, заказу, изделию, извещению…" oninput="renderRegistry()">
       </div>
     </div>
     <div id="regBody"></div>
@@ -183,7 +225,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.1.6</footer>
+<footer class="ver-footer">v0.2.0</footer>
 
 <script>
 'use strict';
@@ -194,13 +236,34 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 // Destination:Choice. Список фирм для «Места отправки» берётся
 // из Tu_accounting.client_text — эту таблицу ТОЛЬКО читаем (она синхронизируется
 // вебхуками с внешней системой, писать в неё нельзя).
+//
+// Каскад регистрации: фирма → действующий заказ (Customer_subscription,
+// service_end ≥ сегодня) → изделие заказа (децимальные номера из doc_filtered,
+// сопоставленные с Components.decimal_number) → свободные извещения
+// (Notice_of_change по этому изделию с даты аванса заказа, ещё не вошедшие ни
+// в одну опись). Пишем Order:Ref, Product:Ref, Notices:RefList.
+// У этих Ref-колонок настроен displayCol, поэтому onRecords отдаёт в них
+// ТЕКСТ, а не id — настоящие id читаем отдельно через fetchTable своей таблицы
+// (state.rawById), см. refreshRawRefs.
 var FIRMS_TABLE_CANDIDATES = ['Tu_accounting', 'tu_accounting'];
+var ORDERS_TABLE = 'Customer_subscription';
+var COMPONENTS_TABLE = 'Components';
+var NOTICES_TABLE = 'Notice_of_change';
+var OWN_TABLE_FALLBACK = 'Inventory_of_Documents';
 
 var state = {
   records: [],
   recordsLoaded: false,
   firms: [],            // уникальные client_text, отсортированы
   firmsLoaded: false,
+  orders: [],           // [{id, client, contract, advance, end, dns:[...]}]
+  ordersById: {},
+  componentsById: {},   // id -> {id, name, dn, parent}
+  componentByDn: {},    // decimal_number -> component (основное изделие)
+  notices: [],          // [{id, number, date, dn, product}]
+  noticesById: {},
+  rawById: {},          // id описи -> {order, product, notices:[...]} (числовые id)
+  refsLoaded: false,
   regYearFilter: null,  // число года или null («Все»)
   editingId: null
 };
@@ -242,7 +305,314 @@ grist.onRecords(function (records) {
   syncRegisterBtn();
   renderRegYearBar();
   renderRegistry();
+  // Заказы/извещения могли измениться в соседних таблицах, а занятость
+  // извещений зависит от наших же записей — перечитываем при каждом обновлении.
+  loadRefData();
 });
+
+// ---------- Справочники каскада ----------
+
+function decodeList(v) {
+  if (!Array.isArray(v)) return [];
+  return (v[0] === 'L' ? v.slice(1) : v).filter(function (x) { return typeof x === 'number' && x > 0; });
+}
+
+// Децимальные номера вида ЛМАП.402131.009 / ЭЛМАП.467526.001 — как в формуле
+// doc_filtered и в виджете абонентского обслуживания.
+function extractDns(text) {
+  var out = [];
+  String(text || '').replace(/[А-ЯЁA-Z]+\.\d+\.\d+/g, function (m) {
+    if (out.indexOf(m) === -1) out.push(m);
+    return m;
+  });
+  return out;
+}
+
+function todayEpoch() {
+  var d = new Date();
+  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 1000;
+}
+
+function isActiveOrder(o) {
+  return o.end != null && o.end >= todayEpoch();
+}
+
+// Основное изделие — верхний узел цепочки primary_use (как графа «Применяемость»
+// в бланке извещения).
+function rootComponent(c) {
+  var seen = {};
+  while (c && c.parent && !seen[c.id]) {
+    seen[c.id] = true;
+    var p = state.componentsById[c.parent];
+    if (!p) break;
+    c = p;
+  }
+  return c;
+}
+
+function ownTableId() {
+  return (grist.selectedTable && grist.selectedTable.getTableId)
+    ? Promise.resolve(grist.selectedTable.getTableId()).catch(function () { return OWN_TABLE_FALLBACK; })
+    : Promise.resolve(OWN_TABLE_FALLBACK);
+}
+
+var refLoadSeq = 0;
+function loadRefData() {
+  var seq = ++refLoadSeq;
+  Promise.all([
+    grist.docApi.fetchTable(ORDERS_TABLE),
+    grist.docApi.fetchTable(COMPONENTS_TABLE),
+    grist.docApi.fetchTable(NOTICES_TABLE),
+    ownTableId().then(function (tid) { return grist.docApi.fetchTable(tid || OWN_TABLE_FALLBACK); })
+  ]).then(function (res) {
+    if (seq !== refLoadSeq) return;
+    var ot = res[0], ct = res[1], nt = res[2], own = res[3];
+
+    var comps = {};
+    (ct.id || []).forEach(function (id, i) {
+      comps[id] = {
+        id: id,
+        name: ct.name ? ct.name[i] : '',
+        dn: ct.decimal_number ? String(ct.decimal_number[i] || '').trim() : '',
+        parent: ct.primary_use ? ct.primary_use[i] : 0
+      };
+    });
+    state.componentsById = comps;
+    var byDn = {};
+    Object.keys(comps).forEach(function (k) {
+      var c = comps[k];
+      if (!c.dn) return;
+      // При дублях номера предпочитаем верхний узел (без primary_use).
+      if (!byDn[c.dn] || (byDn[c.dn].parent && !c.parent)) byDn[c.dn] = c;
+    });
+    state.componentByDn = byDn;
+
+    var orders = [];
+    (ot.id || []).forEach(function (id, i) {
+      orders.push({
+        id: id,
+        client: normFirm(ot.client ? ot.client[i] : ''),
+        contract: ot.shipment_contract ? String(ot.shipment_contract[i] || '') : '',
+        advance: ot.advance_date ? ot.advance_date[i] : null,
+        end: ot.service_end ? ot.service_end[i] : null,
+        dns: extractDns(ot.doc_filtered ? ot.doc_filtered[i] : '')
+      });
+    });
+    state.orders = orders;
+    state.ordersById = {};
+    orders.forEach(function (o) { state.ordersById[o.id] = o; });
+
+    var notices = [];
+    (nt.id || []).forEach(function (id, i) {
+      var pid = nt.Product ? nt.Product[i] : 0;
+      var root = rootComponent(comps[pid]);
+      notices.push({
+        id: id,
+        number: nt.Number ? String(nt.Number[i] || '') : '',
+        date: nt.IssueDate ? nt.IssueDate[i] : null,
+        dn: root ? root.dn : '',
+        product: root ? root.name : (nt.ProductName ? nt.ProductName[i] : '')
+      });
+    });
+    notices.sort(function (a, b) { return (a.date || 0) - (b.date || 0) || a.id - b.id; });
+    state.notices = notices;
+    state.noticesById = {};
+    notices.forEach(function (n) { state.noticesById[n.id] = n; });
+
+    var raw = {};
+    (own.id || []).forEach(function (id, i) {
+      raw[id] = {
+        order: own.Order && typeof own.Order[i] === 'number' ? own.Order[i] : 0,
+        product: own.Product && typeof own.Product[i] === 'number' ? own.Product[i] : 0,
+        notices: own.Notices ? decodeList(own.Notices[i]) : []
+      };
+    });
+    state.rawById = raw;
+    state.refsLoaded = true;
+
+    formCascade.refresh();
+    syncRegisterBtn();
+    renderRegistry();
+  }).catch(function (err) {
+    console.error('Не удалось загрузить заказы/изделия/извещения', err);
+  });
+}
+
+function ordersForFirm(firm, keepId) {
+  var key = normFirm(firm).toLowerCase();
+  if (!key) return [];
+  return state.orders.filter(function (o) {
+    return o.id === keepId || (o.client.toLowerCase() === key && isActiveOrder(o));
+  }).sort(function (a, b) { return (b.advance || 0) - (a.advance || 0); });
+}
+
+function productsForOrder(order) {
+  if (!order) return [];
+  var out = [];
+  order.dns.forEach(function (dn) {
+    var c = state.componentByDn[dn];
+    if (c && out.indexOf(c) === -1) out.push(c);
+  });
+  return out;
+}
+
+// Извещения, уже вошедшие в другие описи (кроме редактируемой).
+function takenNoticeIds(exceptRecordId) {
+  var taken = {};
+  Object.keys(state.rawById).forEach(function (rid) {
+    if (Number(rid) === exceptRecordId) return;
+    state.rawById[rid].notices.forEach(function (nid) { taken[nid] = true; });
+  });
+  return taken;
+}
+
+function freeNotices(order, product, exceptRecordId, keepIds) {
+  if (!order || !product || !product.dn) return [];
+  var taken = takenNoticeIds(exceptRecordId);
+  var keep = {};
+  (keepIds || []).forEach(function (id) { keep[id] = true; });
+  return state.notices.filter(function (n) {
+    if (keep[n.id]) return true;
+    if (taken[n.id] || n.dn !== product.dn) return false;
+    return order.advance != null && n.date != null && n.date >= order.advance;
+  });
+}
+
+function orderLabel(o) {
+  if (!o) return '';
+  var s = o.contract || ('заказ #' + o.id);
+  if (o.advance) s += ' · аванс ' + formatDate(o.advance);
+  if (o.end) s += ' · до ' + formatDate(o.end);
+  if (!isActiveOrder(o)) s += ' (истёк)';
+  return s;
+}
+
+// Каскад «заказ → изделие → извещения». Элементы (orderEl/productEl/noticesEl)
+// вставляет вызывающий код — в форму регистрации или в ячейки редактируемой
+// строки реестра. initial — {order, product, notices} текущей описи (для
+// редактирования: её заказ показываем даже если он уже истёк, её извещения
+// остаются в списке выбора).
+function createCascade(opts) {
+  var small = !!opts.small;
+  var autoPick = !small; // в строке реестра ничего не подставляем сами
+  var exceptId = opts.recordId != null ? opts.recordId : null;
+  var init = opts.initial || {};
+  var firm = opts.firm || '';
+  var cur = { order: init.order || 0, product: init.product || 0, notices: (init.notices || []).slice() };
+  var keepOrderId = init.order || 0;
+  var keepNotices = (init.notices || []).slice();
+
+  var orderSel = document.createElement('select');
+  orderSel.className = 'form-select' + (small ? ' small' : '');
+  var productSel = document.createElement('select');
+  productSel.className = 'form-select' + (small ? ' small' : '');
+  var box = document.createElement('div');
+  box.className = 'ntc-box' + (small ? ' small' : '');
+
+  function fillSelect(sel, items, selected, placeholder, labelFn) {
+    sel.innerHTML = '';
+    var ph = document.createElement('option');
+    ph.value = ''; ph.textContent = placeholder;
+    sel.appendChild(ph);
+    items.forEach(function (it) {
+      var o = document.createElement('option');
+      o.value = String(it.id); o.textContent = labelFn(it);
+      sel.appendChild(o);
+    });
+    sel.value = selected ? String(selected) : '';
+    sel.disabled = !items.length;
+    sel.title = sel.selectedIndex > 0 ? sel.options[sel.selectedIndex].textContent : '';
+  }
+
+  function hint(text) {
+    var h = document.createElement('span');
+    h.className = 'ntc-hint'; h.textContent = text;
+    box.appendChild(h);
+  }
+
+  function render() {
+    var orders = ordersForFirm(firm, keepOrderId);
+    if (!orders.some(function (o) { return o.id === cur.order; })) cur.order = (autoPick && orders.length === 1) ? orders[0].id : 0;
+    fillSelect(orderSel, orders, cur.order,
+      !firm ? 'Сначала выберите фирму' : (orders.length ? 'Выберите заказ…' : 'Нет действующих заказов'),
+      orderLabel);
+
+    var order = state.ordersById[cur.order];
+    var products = productsForOrder(order);
+    if (!products.some(function (p) { return p.id === cur.product; })) cur.product = (autoPick || cur.order !== keepOrderId) && products.length === 1 ? products[0].id : 0;
+    fillSelect(productSel, products, cur.product,
+      !order ? '—' : (products.length ? 'Выберите изделие…' : 'Нет изделия с дец. номером'),
+      function (c) { return c.name + ' · ' + c.dn; });
+
+    var product = state.componentsById[cur.product];
+    var list = freeNotices(order, product, exceptId, keepNotices);
+    var allowed = {};
+    list.forEach(function (n) { allowed[n.id] = true; });
+    cur.notices = cur.notices.filter(function (id) { return allowed[id]; });
+
+    box.innerHTML = '';
+    if (!order) hint('Выберите заказ');
+    else if (!product) hint('Выберите изделие');
+    else if (!order.advance) hint('У заказа нет даты аванса');
+    else if (!list.length) hint('Нет свободных извещений с ' + formatDate(order.advance));
+    else {
+      list.forEach(function (n) {
+        var chip = document.createElement('span');
+        chip.className = 'ntc-chip' + (cur.notices.indexOf(n.id) !== -1 ? ' on' : '');
+        chip.title = n.product + ' · ' + formatDate(n.date);
+        chip.innerHTML = '';
+        chip.appendChild(document.createTextNode(n.number));
+        var d = document.createElement('span');
+        d.className = 'ntc-date'; d.textContent = formatDate(n.date);
+        chip.appendChild(d);
+        chip.addEventListener('click', function () {
+          var i = cur.notices.indexOf(n.id);
+          if (i === -1) cur.notices.push(n.id); else cur.notices.splice(i, 1);
+          render(); changed();
+        });
+        box.appendChild(chip);
+      });
+      if (list.length > 1) {
+        var all = document.createElement('span');
+        all.className = 'ntc-all';
+        var allOn = cur.notices.length === list.length;
+        all.textContent = allOn ? 'снять все' : 'выбрать все';
+        all.addEventListener('click', function () {
+          cur.notices = allOn ? [] : list.map(function (n) { return n.id; });
+          render(); changed();
+        });
+        box.appendChild(all);
+      }
+    }
+  }
+
+  function changed() { if (opts.onChange) opts.onChange(); }
+
+  orderSel.addEventListener('change', function () {
+    cur.order = Number(orderSel.value) || 0; cur.product = 0; cur.notices = [];
+    render(); changed();
+  });
+  productSel.addEventListener('change', function () {
+    cur.product = Number(productSel.value) || 0; cur.notices = [];
+    render(); changed();
+  });
+
+  render();
+
+  return {
+    orderEl: orderSel,
+    productEl: productSel,
+    noticesEl: box,
+    setFirm: function (f) {
+      if (normFirm(f) === normFirm(firm)) return;
+      firm = f || ''; cur = { order: 0, product: 0, notices: [] };
+      render(); changed();
+    },
+    getValue: function () { return { order: cur.order, product: cur.product, notices: cur.notices.slice() }; },
+    reset: function () { cur = { order: 0, product: 0, notices: [] }; keepOrderId = 0; keepNotices = []; render(); changed(); },
+    refresh: render
+  };
+}
 
 // ---------- Firms (Tu_accounting.client_text, без дублей) ----------
 
@@ -485,29 +855,41 @@ var fDate = document.getElementById('fDate');
 fDate.value = dateToInputValue(Math.floor(Date.now() / 1000));
 fDate.addEventListener('change', function () { updateNumberPreview(); syncRegisterBtn(); });
 
-var formFirmCombo = createFirmCombo('', false, function () { syncRegisterBtn(); });
+var formCascade = createCascade({ onChange: function () { syncRegisterBtn(); } });
+document.getElementById('fOrderWrap').appendChild(formCascade.orderEl);
+document.getElementById('fProductWrap').appendChild(formCascade.productEl);
+document.getElementById('fNoticesWrap').appendChild(formCascade.noticesEl);
+
+var formFirmCombo = createFirmCombo('', false, function (v) { formCascade.setFirm(v); syncRegisterBtn(); });
 document.getElementById('fDestWrap').appendChild(formFirmCombo.el);
 formFirmCombo.refresh();
 
 var btnRegister = document.getElementById('btnRegister');
 var registering = false;
 function syncRegisterBtn() {
-  btnRegister.disabled = registering || !state.recordsLoaded || !fDate.value || !formFirmCombo.getValue();
+  var c = formCascade.getValue();
+  btnRegister.disabled = registering || !state.recordsLoaded || !state.refsLoaded || !fDate.value ||
+    !formFirmCombo.getValue() || !c.order || !c.product || !c.notices.length;
 }
 
 btnRegister.addEventListener('click', function () {
   var year = currentFormYear();
   var dest = formFirmCombo.getValue();
-  if (!year || !dest) return;
+  var c = formCascade.getValue();
+  if (!year || !dest || !c.order || !c.product || !c.notices.length) return;
   var fields = {
     IssueDate: inputValueToDate(fDate.value),
-    Destination: dest
+    Destination: dest,
+    Order: c.order,
+    Product: c.product,
+    Notices: ['L'].concat(c.notices)
   };
   registering = true;
   syncRegisterBtn();
   grist.selectedTable.create({ fields: fields }).then(function () {
     registering = false;
     formFirmCombo.setValue('');
+    formCascade.reset();
     syncRegisterBtn();
   }).catch(function (err) {
     registering = false;
@@ -596,7 +978,9 @@ function renderRegistry() {
   }
   if (q) {
     rows = rows.filter(function (r) {
-      var hay = [r.Number, formatDate(r.IssueDate), r.Destination]
+      var v = recordView(r);
+      var hay = [r.Number, formatDate(r.IssueDate), r.Destination, v.orderText, v.productText, v.dnText]
+        .concat(v.notices.map(function (n) { return n.number; }))
         .map(function (v) { return String(v == null ? '' : v).toLowerCase(); }).join(' ');
       return hay.indexOf(q) !== -1;
     });
@@ -610,12 +994,14 @@ function renderRegistry() {
   var table = document.createElement('table');
   table.className = 'reg-table';
   table.innerHTML =
-    '<colgroup><col style="width:90px"><col style="width:120px"><col><col style="width:56px"></colgroup>' +
-    '<thead><tr><th>№</th><th>Дата</th><th style="text-align:left">Куда</th><th></th></tr></thead><tbody></tbody>';
+    '<colgroup><col style="width:30px"><col style="width:56px"><col style="width:96px"><col style="width:22%"><col style="width:16%"><col style="width:18%"><col><col style="width:56px"></colgroup>' +
+    '<thead><tr><th class="reg-dl-head" title="Скачать опись (PDF)">' + downloadSvg() + '</th><th>№</th><th>Дата</th><th style="text-align:left">Куда</th>' +
+    '<th style="text-align:left">Заказ</th><th style="text-align:left">Изделие</th><th style="text-align:left">Извещения</th><th></th></tr></thead><tbody></tbody>';
   var tbody = table.querySelector('tbody');
 
   rows.forEach(function (r) {
     var tr = document.createElement('tr');
+    tr.appendChild(buildDownloadCell(r));
     if (state.editingId === r.id) {
       tr.appendChild(editableRow(r));
       tbody.appendChild(tr);
@@ -635,6 +1021,40 @@ function renderRegistry() {
     tdDest.className = 'reg-dest';
     tdDest.textContent = r.Destination || '';
     tr.appendChild(tdDest);
+
+    var v = recordView(r);
+    var tdOrder = document.createElement('td');
+    tdOrder.className = 'reg-left';
+    tdOrder.textContent = v.orderText;
+    if (v.order && v.order.advance) {
+      var sub = document.createElement('span');
+      sub.className = 'reg-sub'; sub.textContent = 'аванс ' + formatDate(v.order.advance);
+      tdOrder.appendChild(sub);
+    }
+    tr.appendChild(tdOrder);
+
+    var tdProd = document.createElement('td');
+    tdProd.className = 'reg-left';
+    tdProd.textContent = v.productText;
+    if (v.dnText) {
+      var dn = document.createElement('span');
+      dn.className = 'reg-sub'; dn.textContent = v.dnText;
+      tdProd.appendChild(dn);
+    }
+    tr.appendChild(tdProd);
+
+    var tdNtc = document.createElement('td');
+    tdNtc.className = 'reg-left';
+    var ntcWrap = document.createElement('div');
+    ntcWrap.className = 'reg-ntc';
+    v.notices.forEach(function (n) {
+      var t = document.createElement('span');
+      t.className = 'tag tag-blue'; t.textContent = n.number;
+      t.title = (n.product || '') + (n.date ? ' · ' + formatDate(n.date) : '');
+      ntcWrap.appendChild(t);
+    });
+    tdNtc.appendChild(ntcWrap);
+    tr.appendChild(tdNtc);
 
     var tdActions = document.createElement('td');
     tdActions.className = 'reg-actions';
@@ -685,10 +1105,19 @@ function editableRow(r) {
   // Старое значение могло не совпасть ни с одной фирмой из текущего списка —
   // оставляем его как есть, пока пользователь не выберет другую.
   var destValue = r.Destination || '';
-  var combo = createFirmCombo(destValue, true, function (v) { destValue = v; });
+  var raw = state.rawById[r.id] || { order: 0, product: 0, notices: [] };
+  var cascade = createCascade({ small: true, recordId: r.id, firm: destValue, initial: raw });
+  var combo = createFirmCombo(destValue, true, function (v) { destValue = v; cascade.setFirm(v); });
   tdDest.appendChild(combo.el);
   frag.appendChild(tdDest);
   combo.refresh();
+
+  [cascade.orderEl, cascade.productEl, cascade.noticesEl].forEach(function (el) {
+    var td = document.createElement('td');
+    td.className = 'reg-left';
+    td.appendChild(el);
+    frag.appendChild(td);
+  });
 
   var tdActions = document.createElement('td');
   tdActions.className = 'reg-actions';
@@ -696,9 +1125,17 @@ function editableRow(r) {
   saveBtn.addEventListener('click', function () {
     var dest = destValue || (normFirm(combo.input.value) === normFirm(r.Destination) ? r.Destination : '');
     if (!dest) { window.alert('Выберите место отправки из списка.'); return; }
+    var c = cascade.getValue();
+    if (c.order && (!c.product || !c.notices.length)) {
+      window.alert('Выберите изделие и хотя бы одно извещение (или очистите заказ).');
+      return;
+    }
     var fields = {
       IssueDate: inputValueToDate(inDate.value),
-      Destination: dest
+      Destination: dest,
+      Order: c.order || 0,
+      Product: c.order ? c.product : 0,
+      Notices: c.order ? ['L'].concat(c.notices) : null
     };
     saveBtn.disabled = true;
     grist.selectedTable.update({ id: r.id, fields: fields }).then(function () {
@@ -714,6 +1151,42 @@ function editableRow(r) {
 
   return frag;
 }
+
+// Что показывать в строке реестра: id берём из rawById (числовые, через
+// fetchTable), текст — из справочников; пока справочники не загрузились,
+// падаем на текст displayCol, который прислал onRecords.
+function recordView(r) {
+  var raw = state.rawById[r.id];
+  var order = raw ? state.ordersById[raw.order] : null;
+  var comp = raw ? state.componentsById[raw.product] : null;
+  var notices = raw ? raw.notices.map(function (id) {
+    return state.noticesById[id] || { id: id, number: '#' + id };
+  }) : [];
+  return {
+    order: order,
+    orderText: order ? (order.contract || ('заказ #' + order.id)) : (typeof r.Order === 'string' ? r.Order : ''),
+    productText: comp ? comp.name : (typeof r.Product === 'string' ? r.Product : ''),
+    dnText: comp ? comp.dn : (r.DecimalNumber || ''),
+    notices: notices
+  };
+}
+
+// Бланк описи ещё не утверждён — кнопка есть в каждой строке (одна опись —
+// один PDF), но пока неактивна. Генерация будет как в notification_numbers:
+// pdf-lib + шаблон + times-cp1251.ttf.
+function buildDownloadCell(r) {
+  var td = document.createElement('td');
+  td.className = 'reg-dl';
+  var wrap = document.createElement('div');
+  wrap.className = 'reg-dl-wrap';
+  var btn = iconButton('dl-btn', pdfSvg(), 'Бланк описи ещё не подключён');
+  btn.disabled = true;
+  wrap.appendChild(btn);
+  td.appendChild(wrap);
+  return td;
+}
+function downloadSvg() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M4 21h16"/></svg>'; }
+function pdfSvg() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 11h3M9 14h6M9 17h6"/></svg>'; }
 
 function iconButton(cls, svg, title) {
   var btn = document.createElement('button');
