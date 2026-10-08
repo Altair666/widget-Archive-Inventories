@@ -56,6 +56,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .btn-add:hover{opacity:.88}
 .btn-add:active{transform:scale(.98)}
 .btn-add:disabled{opacity:.35;cursor:not-allowed}
+.btn-add svg{flex-shrink:0}
 
 /* ── Firm combobox (выбор фирмы из Tu_accounting.client_text) ── */
 .firm-combo{position:relative;width:100%}
@@ -116,6 +117,9 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .ntc-chip.on .ntc-date{color:var(--grn)}
 .ntc-all{font-size:10px;color:var(--acc);cursor:pointer;margin-left:auto;padding:0 4px;user-select:none;white-space:nowrap}
 .ntc-all:hover{text-decoration:underline}
+.lock-btn{width:32px;padding:0}
+.lock-btn.off{background:var(--red-br)}
+.form-one-row{grid-template-columns:96px 128px 32px minmax(150px,1.1fr) minmax(150px,1fr) minmax(150px,1fr) minmax(170px,1.6fr) auto;align-items:end}
 .reg-ntc{display:flex;flex-wrap:wrap;gap:3px}
 .reg-left{text-align:left!important;word-break:break-word;overflow-wrap:anywhere}
 .reg-sub{display:block;font-family:var(--mono);font-size:10px;color:var(--tx3)}
@@ -157,7 +161,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
       <span class="ph-title">Регистрация описи</span>
     </div>
     <div class="pb">
-      <div class="form-row" style="grid-template-columns:130px 130px 260px 1fr">
+      <div class="form-row form-one-row">
         <div class="form-group">
           <label class="form-label">№ описи</label>
           <div class="form-input mono formed-num" id="fNum">—</div>
@@ -167,28 +171,30 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
           <input class="form-input mono" type="date" id="fDate">
         </div>
         <div class="form-group">
+          <label class="form-label">&nbsp;</label>
+          <button class="btn-add lock-btn" id="btnLock" type="button"></button>
+        </div>
+        <div class="form-group">
           <label class="form-label">Место отправки</label>
           <div id="fDestWrap"></div>
-        </div>
-        <div class="form-group" style="align-items:flex-end">
-          <label class="form-label">&nbsp;</label>
-          <button class="btn-add" id="btnRegister" type="button" style="width:170px" disabled>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Зарегистрировать
-          </button>
-        </div>
-      </div>
-      <div class="form-row" style="grid-template-columns:270px 260px 1fr;margin-top:10px">
-        <div class="form-group">
-          <label class="form-label">Заказ</label>
-          <div id="fOrderWrap"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Изделие</label>
           <div id="fProductWrap"></div>
         </div>
         <div class="form-group">
+          <label class="form-label">Заказ</label>
+          <div id="fOrderWrap"></div>
+        </div>
+        <div class="form-group">
           <label class="form-label">Извещения</label>
           <div id="fNoticesWrap"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">&nbsp;</label>
+          <button class="btn-add" id="btnRegister" type="button" disabled>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Зарегистрировать
+          </button>
         </div>
       </div>
     </div>
@@ -225,7 +231,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.2.1</footer>
+<footer class="ver-footer">v0.3.0</footer>
 
 <script>
 'use strict';
@@ -252,6 +258,7 @@ var NOTICES_TABLE = 'Notice_of_change';
 var OWN_TABLE_FALLBACK = 'Inventory_of_Documents';
 
 var state = {
+  locked: true,         // замок: только действующие заказы; снят — «задним числом»
   records: [],
   recordsLoaded: false,
   firms: [],            // уникальные client_text, отсортированы
@@ -443,8 +450,21 @@ function ordersForFirm(firm, keepId) {
   var key = normFirm(firm).toLowerCase();
   if (!key) return [];
   return state.orders.filter(function (o) {
-    return o.id === keepId || (o.client.toLowerCase() === key && isActiveOrder(o));
+    return o.id === keepId || (o.client.toLowerCase() === key && (!state.locked || isActiveOrder(o)));
   }).sort(function (a, b) { return (b.advance || 0) - (a.advance || 0); });
+}
+
+// Изделия из всех доступных заказов фирмы (без дублей).
+function productsForOrders(orders) {
+  var out = [];
+  orders.forEach(function (o) {
+    productsForOrder(o).forEach(function (c) { if (out.indexOf(c) === -1) out.push(c); });
+  });
+  return out.sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
+}
+
+function orderHasProduct(order, product) {
+  return !!(order && product && product.dn && order.dns.indexOf(product.dn) !== -1);
 }
 
 function productsForOrder(order) {
@@ -488,7 +508,7 @@ function orderLabel(o) {
   return s;
 }
 
-// Каскад «заказ → изделие → извещения». Элементы (orderEl/productEl/noticesEl)
+// Каскад «изделие → заказ → извещения». Элементы (orderEl/productEl/noticesEl)
 // вставляет вызывающий код — в форму регистрации или в ячейки редактируемой
 // строки реестра. initial — {order, product, notices} текущей описи (для
 // редактирования: её заказ показываем даже если он уже истёк, её извещения
@@ -501,6 +521,7 @@ function createCascade(opts) {
   var firm = opts.firm || '';
   var cur = { order: init.order || 0, product: init.product || 0, notices: (init.notices || []).slice() };
   var keepOrderId = init.order || 0;
+  var initProductId = init.product || 0;
   var keepNotices = (init.notices || []).slice();
 
   var orderSel = document.createElement('select');
@@ -532,18 +553,20 @@ function createCascade(opts) {
   }
 
   function render() {
-    var orders = ordersForFirm(firm, keepOrderId);
-    if (!orders.some(function (o) { return o.id === cur.order; })) cur.order = (autoPick && orders.length === 1) ? orders[0].id : 0;
-    fillSelect(orderSel, orders, cur.order,
-      !firm ? 'Сначала выберите фирму' : (orders.length ? 'Выберите заказ…' : 'Нет действующих заказов'),
-      orderLabel);
-
-    var order = state.ordersById[cur.order];
-    var products = productsForOrder(order);
-    if (!products.some(function (p) { return p.id === cur.product; })) cur.product = (autoPick || cur.order !== keepOrderId) && products.length === 1 ? products[0].id : 0;
+    var firmOrders = ordersForFirm(firm, keepOrderId);
+    var products = productsForOrders(firmOrders);
+    if (!products.some(function (p) { return p.id === cur.product; })) cur.product = (autoPick && products.length === 1) ? products[0].id : 0;
     fillSelect(productSel, products, cur.product,
-      !order ? '—' : (products.length ? 'Выберите изделие…' : 'Нет изделия с дец. номером'),
+      !firm ? 'Сначала выберите фирму' : (firmOrders.length ? (products.length ? 'Выберите изделие…' : 'Нет изделий в заказах')
+        : (state.locked ? 'Нет действующих заказов' : 'Нет заказов')),
       function (c) { return c.name + ' · ' + c.dn; });
+
+    var prod = state.componentsById[cur.product];
+    var orders = firmOrders.filter(function (o) { return orderHasProduct(o, prod); });
+    if (!orders.some(function (o) { return o.id === cur.order; })) cur.order = (autoPick || cur.product !== initProductId) && orders.length === 1 ? orders[0].id : 0;
+    fillSelect(orderSel, orders, cur.order,
+      !prod ? '—' : 'Выберите заказ…', orderLabel);
+    var order = state.ordersById[cur.order];
 
     var product = state.componentsById[cur.product];
     var list = freeNotices(order, product, exceptId, keepNotices);
@@ -552,8 +575,8 @@ function createCascade(opts) {
     cur.notices = cur.notices.filter(function (id) { return allowed[id]; });
 
     box.innerHTML = '';
-    if (!order) hint('Выберите заказ');
-    else if (!product) hint('Выберите изделие');
+    if (!product) hint('Выберите изделие');
+    else if (!order) hint('Выберите заказ');
     else if (!order.advance) hint('У заказа нет даты аванса');
     else if (!list.length) hint('Нет свободных извещений с ' + formatDate(order.advance));
     else {
@@ -589,12 +612,12 @@ function createCascade(opts) {
 
   function changed() { if (opts.onChange) opts.onChange(); }
 
-  orderSel.addEventListener('change', function () {
-    cur.order = Number(orderSel.value) || 0; cur.product = 0; cur.notices = [];
+  productSel.addEventListener('change', function () {
+    cur.product = Number(productSel.value) || 0; cur.order = 0; cur.notices = [];
     render(); changed();
   });
-  productSel.addEventListener('change', function () {
-    cur.product = Number(productSel.value) || 0; cur.notices = [];
+  orderSel.addEventListener('change', function () {
+    cur.order = Number(orderSel.value) || 0; cur.notices = [];
     render(); changed();
   });
 
@@ -610,7 +633,7 @@ function createCascade(opts) {
       render(); changed();
     },
     getValue: function () { return { order: cur.order, product: cur.product, notices: cur.notices.slice() }; },
-    reset: function () { cur = { order: 0, product: 0, notices: [] }; keepOrderId = 0; keepNotices = []; render(); changed(); },
+    reset: function () { cur = { order: 0, product: 0, notices: [] }; keepOrderId = 0; initProductId = 0; keepNotices = []; render(); changed(); },
     refresh: render
   };
 }
@@ -671,7 +694,7 @@ function activeFirms(keep) {
   var keepKey = keepName.toLowerCase();
   var out = state.firms.filter(function (f) {
     var k = f.toLowerCase();
-    return active[k] || (keepKey && k === keepKey);
+    return !state.locked || active[k] || (keepKey && k === keepKey);
   });
   // Старое значение может быть фирмой не из Tu_accounting (ООО Авесто и т.п.).
   if (keepKey && !out.some(function (f) { return f.toLowerCase() === keepKey; })) out.unshift(keepName);
@@ -886,6 +909,34 @@ var formFirmCombo = createFirmCombo('', false, function (v) { formCascade.setFir
 document.getElementById('fDestWrap').appendChild(formFirmCombo.el);
 formFirmCombo.refresh();
 
+// Замок: закрыт (зелёный) — только фирмы с действующими заказами и сами
+// действующие заказы; открыт (красный) — регистрация задним числом: все фирмы
+// и прошедшие заказы.
+var btnLock = document.getElementById('btnLock');
+function lockSvg(on) {
+  return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/>' +
+    (on ? '<path d="M8 11V7a4 4 0 0 1 8 0v4"/>' : '<path d="M8 11V7a4 4 0 0 1 7.8-1.2"/>') + '</svg>';
+}
+function syncLockBtn() {
+  btnLock.classList.toggle('off', !state.locked);
+  btnLock.innerHTML = lockSvg(state.locked);
+  btnLock.title = state.locked
+    ? 'Только действующие заказы. Нажмите, чтобы зарегистрировать задним числом'
+    : 'Задним числом: доступны все фирмы и прошедшие заказы. Нажмите, чтобы вернуть ограничение';
+}
+btnLock.addEventListener('click', function () {
+  state.locked = !state.locked;
+  syncLockBtn();
+  // После возврата замка фирма без действующих заказов из формы убирается.
+  var firm = formFirmCombo.getValue();
+  if (state.locked && firm && !findFirm(firm, activeFirms(''))) formFirmCombo.setValue('');
+  formFirmCombo.refresh();
+  formCascade.refresh();
+  syncRegisterBtn();
+  if (state.editingId != null) renderRegistry();
+});
+syncLockBtn();
+
 var btnRegister = document.getElementById('btnRegister');
 var registering = false;
 function syncRegisterBtn() {
@@ -1016,9 +1067,9 @@ function renderRegistry() {
   var table = document.createElement('table');
   table.className = 'reg-table';
   table.innerHTML =
-    '<colgroup><col style="width:30px"><col style="width:56px"><col style="width:96px"><col style="width:22%"><col style="width:16%"><col style="width:18%"><col><col style="width:56px"></colgroup>' +
+    '<colgroup><col style="width:30px"><col style="width:56px"><col style="width:96px"><col style="width:22%"><col style="width:18%"><col style="width:16%"><col><col style="width:56px"></colgroup>' +
     '<thead><tr><th class="reg-dl-head" title="Скачать опись (PDF)">' + downloadSvg() + '</th><th>№</th><th>Дата</th><th style="text-align:left">Куда</th>' +
-    '<th style="text-align:left">Заказ</th><th style="text-align:left">Изделие</th><th style="text-align:left">Извещения</th><th></th></tr></thead><tbody></tbody>';
+    '<th style="text-align:left">Изделие</th><th style="text-align:left">Заказ</th><th style="text-align:left">Извещения</th><th></th></tr></thead><tbody></tbody>';
   var tbody = table.querySelector('tbody');
 
   rows.forEach(function (r) {
@@ -1053,7 +1104,6 @@ function renderRegistry() {
       sub.className = 'reg-sub'; sub.textContent = 'аванс ' + formatDate(v.order.advance);
       tdOrder.appendChild(sub);
     }
-    tr.appendChild(tdOrder);
 
     var tdProd = document.createElement('td');
     tdProd.className = 'reg-left';
@@ -1064,6 +1114,7 @@ function renderRegistry() {
       tdProd.appendChild(dn);
     }
     tr.appendChild(tdProd);
+    tr.appendChild(tdOrder);
 
     var tdNtc = document.createElement('td');
     tdNtc.className = 'reg-left';
@@ -1134,7 +1185,7 @@ function editableRow(r) {
   frag.appendChild(tdDest);
   combo.refresh();
 
-  [cascade.orderEl, cascade.productEl, cascade.noticesEl].forEach(function (el) {
+  [cascade.productEl, cascade.orderEl, cascade.noticesEl].forEach(function (el) {
     var td = document.createElement('td');
     td.className = 'reg-left';
     td.appendChild(el);
@@ -1148,8 +1199,8 @@ function editableRow(r) {
     var dest = destValue || (normFirm(combo.input.value) === normFirm(r.Destination) ? r.Destination : '');
     if (!dest) { window.alert('Выберите место отправки из списка.'); return; }
     var c = cascade.getValue();
-    if (c.order && (!c.product || !c.notices.length)) {
-      window.alert('Выберите изделие и хотя бы одно извещение (или очистите заказ).');
+    if (c.product && (!c.order || !c.notices.length)) {
+      window.alert('Выберите заказ и хотя бы одно извещение (или очистите изделие).');
       return;
     }
     var fields = {
