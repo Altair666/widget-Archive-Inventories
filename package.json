@@ -2,7 +2,7 @@
   "name": "@gristlabs/widget-archive-inventories",
   "description": "Реестр описей документации, отправляемой в архив",
   "homePage": "https://github.com/Altair666/widget-Archive-Inventories",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "grist": {
     "name": "Archive inventories",
     "url": "https://altair666.github.io/widget-Archive-Inventories/index.html",

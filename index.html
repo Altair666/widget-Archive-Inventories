@@ -111,6 +111,9 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .form-select.small{height:26px;font-size:11px;padding:0 22px 0 6px;background-position:right 5px center}
 .ntc-box{display:flex;flex-wrap:wrap;align-items:center;gap:5px;min-height:32px;border:1px solid var(--brd);border-radius:var(--r);background:#f7f7f7;padding:4px 6px}
 .ntc-box.small{min-height:26px;padding:3px 4px;gap:4px}
+.ntc-box.small .ntc-date{display:none}
+.ntc-box{min-width:0;overflow:hidden}
+.ntc-chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .ntc-hint{font-size:11px;color:var(--tx3);padding:0 3px}
 .ntc-chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:10px;background:var(--surf3);color:var(--tx2);cursor:pointer;border:1px solid transparent;white-space:nowrap;user-select:none;transition:all .12s}
 .ntc-chip:hover{background:var(--brd2)}
@@ -121,13 +124,13 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .ntc-all:hover{text-decoration:underline}
 .lock-btn{width:32px;padding:0}
 .lock-btn.off{background:var(--red-br)}
-.form-one-row{grid-template-columns:90px 122px 32px minmax(160px,1.1fr) minmax(130px,.9fr) minmax(160px,1fr) minmax(180px,1.6fr) auto;align-items:end}
+.form-one-row{grid-template-columns:90px 122px 32px minmax(200px,1.5fr) minmax(160px,1fr) minmax(130px,.8fr) minmax(150px,1fr) auto;align-items:end}
 .form-select.mono{font-family:var(--mono)}
-.reg-doc{display:block;font-family:var(--mono);font-size:10.5px;text-align:left;white-space:nowrap}
+.reg-doc{display:block;font-family:var(--mono);font-size:10.5px;text-align:left}
 .reg-doc + .reg-doc{margin-top:3px}
 .reg-ntc{display:flex;flex-wrap:wrap;gap:3px}
+.reg-table td.reg-nowrap{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal;overflow-wrap:normal}
 .reg-left{text-align:left!important;word-break:break-word;overflow-wrap:anywhere}
-.reg-sub{display:block;font-family:var(--mono);font-size:10px;color:var(--tx3)}
 
 /* ── Столбец скачивания PDF (как в notification_numbers) ── */
 .reg-dl,.reg-dl-head{white-space:nowrap;text-align:center!important;padding-left:0!important;padding-right:0!important}
@@ -138,7 +141,8 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .dl-btn:hover{background:var(--red-bg);color:var(--red-br);border-color:var(--red-brd)}
 .dl-btn:disabled{color:var(--tx3);opacity:.6;cursor:not-allowed;background:transparent;border-color:transparent}
 
-.reg-actions{white-space:nowrap}
+.reg-ed-head{color:#E07B1F}
+.reg-ed-wrap{flex-direction:column;gap:2px}
 .cell-edit-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid transparent;border-radius:4pt;background:transparent;color:#E07B1F;cursor:pointer;flex-shrink:0;transition:all .1s;padding:0}
 .cell-edit-btn:hover{background:#FFF4E6;color:#C5651A;border-color:#F5D4A0}
 .cell-edit-btn:disabled{opacity:.35;cursor:not-allowed}
@@ -236,7 +240,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.10.0</footer>
+<footer class="ver-footer">v0.11.0</footer>
 
 <script>
 'use strict';
@@ -563,15 +567,14 @@ function freeNotices(order, product, exceptRecordId, keepIds) {
 function orderLabel(o) {
   if (!o) return '';
   var s = o.contract || ('заказ #' + o.id);
-  if (o.advance) s += ' · аванс ' + formatDate(o.advance);
   if (o.end) s += ' · до ' + formatDate(o.end);
   if (!isActiveOrder(o)) s += ' (истёк)';
   return s;
 }
 
-// Документ одной строкой: «26-00015 ЛМАП.402131.018ТУ_изм.13».
+// Документ одной строкой: «26-00015 ЛМАП.402131.018ТУ изм.13».
 function docLine(d) {
-  var v = d.version != null && d.version !== '' ? '_изм.' + d.version : '';
+  var v = d.version != null && d.version !== '' ? ' изм.' + d.version : '';
   return ((d.inv ? d.inv + ' ' : '') + d.des + v).trim();
 }
 
@@ -1194,11 +1197,11 @@ function renderRegistry() {
   var table = document.createElement('table');
   table.className = 'reg-table';
   table.innerHTML =
-    '<colgroup><col style="width:30px"><col style="width:44px"><col style="width:84px"><col style="width:13%"><col style="width:8%"><col style="width:10%"><col style="width:8%"><col style="width:10%"><col><col style="width:56px"></colgroup>' +
+    '<colgroup><col style="width:30px"><col style="width:44px"><col style="width:124px"><col style="width:21%"><col style="width:7%"><col style="width:12%"><col style="width:8%"><col style="width:9%"><col><col style="width:30px"></colgroup>' +
     '<thead><tr><th class="reg-dl-head" title="Скачать опись (PDF)">' + downloadSvg() + '</th><th>№</th><th>Дата</th><th style="text-align:left">Куда</th>' +
     '<th style="text-align:left">Изделие</th><th style="text-align:left">Обозначение</th><th style="text-align:left">Заказ</th>' +
     '<th style="text-align:left">Извещения</th>' +
-    '<th style="text-align:left">Документы</th><th></th></tr></thead><tbody></tbody>';
+    '<th style="text-align:left">Документы</th><th class="reg-dl-head reg-ed-head" title="Редактировать строку">' + pencilSvg() + '</th></tr></thead><tbody></tbody>';
   var tbody = table.querySelector('tbody');
 
   rows.forEach(function (r) {
@@ -1233,13 +1236,8 @@ function renderRegistry() {
       return td;
     }
     cell(v.productText);
-    cell(v.dnText, 'reg-left mono');
-    var tdOrder = cell(v.orderText);
-    if (v.order && v.order.advance) {
-      var sub = document.createElement('span');
-      sub.className = 'reg-sub'; sub.textContent = 'аванс ' + formatDate(v.order.advance);
-      tdOrder.appendChild(sub);
-    }
+    cell(v.dnText, 'reg-left mono reg-nowrap');
+    cell(v.orderText);
 
     var tdNtc = cell('');
     var ntcWrap = document.createElement('div');
@@ -1255,12 +1253,9 @@ function renderRegistry() {
     var tdDocs = cell('');
     v.docs.forEach(function (d) { tdDocs.appendChild(docLineEl(d)); });
 
-    var tdActions = document.createElement('td');
-    tdActions.className = 'reg-actions';
     var editBtn = iconButton('cell-edit-btn', pencilSvg(), 'Редактировать');
     editBtn.addEventListener('click', function () { state.editingId = r.id; renderRegistry(); });
-    tdActions.appendChild(editBtn);
-    tr.appendChild(tdActions);
+    tr.appendChild(actionCell([editBtn]));
 
     tbody.appendChild(tr);
   });
@@ -1301,15 +1296,11 @@ function editableRow(r) {
 
   var tdDest = document.createElement('td');
   tdDest.className = 'reg-dest';
-  // Старое значение могло не совпасть ни с одной фирмой из текущего списка —
-  // оставляем его как есть, пока пользователь не выберет другую.
-  var destValue = r.Destination || '';
+  // «Куда» при редактировании не меняется — только показываем.
+  tdDest.textContent = r.Destination || '';
   var raw = state.rawById[r.id] || { order: 0, product: 0, notices: [], documents: [] };
-  var cascade = createCascade({ small: true, recordId: r.id, firm: destValue, initial: raw });
-  var combo = createFirmCombo(destValue, true, function (v) { destValue = v; cascade.setFirm(v); });
-  tdDest.appendChild(combo.el);
+  var cascade = createCascade({ small: true, recordId: r.id, firm: r.Destination || '', initial: raw });
   frag.appendChild(tdDest);
-  combo.refresh();
 
   [cascade.productEl, cascade.dnEl, cascade.orderEl, cascade.noticesEl, cascade.docsEl].forEach(function (el) {
     var td = document.createElement('td');
@@ -1318,12 +1309,8 @@ function editableRow(r) {
     frag.appendChild(td);
   });
 
-  var tdActions = document.createElement('td');
-  tdActions.className = 'reg-actions';
   var saveBtn = iconButton('cell-edit-btn save', checkSvg(), 'Сохранить');
   saveBtn.addEventListener('click', function () {
-    var dest = destValue || (normFirm(combo.input.value) === normFirm(r.Destination) ? r.Destination : '');
-    if (!dest) { window.alert('Выберите место отправки из списка.'); return; }
     var c = cascade.getValue();
     if (c.product && (!c.order || !c.notices.length || !c.documents.length)) {
       window.alert('Выберите заказ, извещение и хотя бы один документ (или очистите изделие).');
@@ -1331,7 +1318,6 @@ function editableRow(r) {
     }
     var fields = {
       IssueDate: inputValueToDate(inDate.value),
-      Destination: dest,
       Order: c.order || 0,
       Product: c.order ? c.product : 0,
       Notices: c.order ? ['L'].concat(c.notices) : null,
@@ -1345,9 +1331,7 @@ function editableRow(r) {
   });
   var cancelBtn = iconButton('cell-edit-btn cancel', xSvg(), 'Отмена');
   cancelBtn.addEventListener('click', function () { state.editingId = null; renderRegistry(); });
-  tdActions.appendChild(saveBtn);
-  tdActions.appendChild(cancelBtn);
-  frag.appendChild(tdActions);
+  frag.appendChild(actionCell([saveBtn, cancelBtn]));
 
   return frag;
 }
@@ -1759,6 +1743,17 @@ function buildDownloadCell(r) {
   btn.disabled = !has;
   btn.addEventListener('click', function () { generateOpisPdf(r, btn); });
   wrap.appendChild(btn);
+  td.appendChild(wrap);
+  return td;
+}
+// Столбец редактирования справа — как столбец скачивания слева: узкий,
+// кнопки по центру (в режиме правки ✓ над ✕).
+function actionCell(btns) {
+  var td = document.createElement('td');
+  td.className = 'reg-dl';
+  var wrap = document.createElement('div');
+  wrap.className = 'reg-dl-wrap reg-ed-wrap';
+  btns.forEach(function (b) { wrap.appendChild(b); });
   td.appendChild(wrap);
   return td;
 }
