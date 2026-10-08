@@ -246,7 +246,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.5.0</footer>
+<footer class="ver-footer">v0.6.0</footer>
 
 <script>
 'use strict';
@@ -426,6 +426,7 @@ function loadRefData() {
         sheets: ib.Sheets ? ib.Sheets[i] : null,
         version: ib.ChangeNumber ? ib.ChangeNumber[i] : null,
         product: ib.Product ? ib.Product[i] : 0,
+        signature: ib.Signature ? String(ib.Signature[i] || '').trim() : '',
         name: ib.Name ? String(ib.Name[i] || '') : ''
       };
     });
@@ -1615,7 +1616,8 @@ function gatherOpisData(r) {
   var edocs = opisGroupRows(raw.documents.map(function (id) {
     var d = state.docsById[id] || { des: '#' + id, inv: '', sheets: null, version: null, product: 0 };
     return { product: opisProductName(d.product), sortKey: d.inv || d.des,
-             row: { inv: d.inv, designation: d.des, ext: d.version, signature: '', sheets: d.sheets, copies: 1 } };
+             row: { inv: d.inv, designation: d.des, ext: d.version != null && d.version !== '' ? d.version + '.pdf' : '',
+                    signature: d.signature || '', sheets: d.sheets, copies: 1 } };
   }));
   var products = [];
   copies.concat(edocs).forEach(function (row) { if (row.group && products.indexOf(row.group) === -1) products.push(row.group); });
@@ -1623,8 +1625,17 @@ function gatherOpisData(r) {
   products.sort(function (a, b) { return a.localeCompare(b, 'ru', { numeric: true }); });
   var year = dateToYear(r.IssueDate) || '';
   var product = products.join(' / ');
+  // Идентификатор тома: буквенное обозначение изделия (ГКВ, ТГ, МГ, КМГ…) +
+  // «№ описи-ГГ», напр. «ГКВ 13-25».
+  var letters = [];
+  products.forEach(function (p) {
+    var m = /^[A-Za-zА-Яа-яЁё]+/.exec(p);
+    if (m && letters.indexOf(m[0]) === -1) letters.push(m[0]);
+  });
+  var volumeNum = (r.Number != null ? r.Number : '') + (year ? '-' + String(year).slice(-2) : '');
   return {
     num: (r.Number != null ? r.Number : '') + (year ? '-' + year : ''),
+    volumeId: letters.length ? letters.join('/') + ' ' + volumeNum : volumeNum,
     docType: 'КД',
     company: r.Destination || '',
     address: firmAddress(r.Destination) || r.Address || '',
