@@ -1,0 +1,65 @@
+{
+ "mm": 2.834645669291339,
+ "fontSize": 11,
+ "x0": 30,
+ "bottom": 277,
+ "row": 5,
+ "sign": {
+  "gap": 8,
+  "line": 5.1,
+  "underline": 4.3,
+  "name_to": 88.2,
+  "sign": [
+   92.5,
+   120.6
+  ],
+  "date": [
+   130,
+   152
+  ],
+  "rows": [
+   [
+    "Составил",
+    "compiled"
+   ],
+   [
+    "Получил",
+    "received"
+   ]
+  ]
+ },
+ "copies": {
+  "cols": [
+   106.95,
+   30.64,
+   27.41
+  ],
+  "keys": [
+   "designation",
+   "sheets",
+   "copies"
+  ],
+  "top1": 86.3,
+  "topA": 38.1
+ },
+ "edocs": {
+  "cols": [
+   19.92,
+   57.54,
+   30.3,
+   28.89,
+   14.1,
+   14.26
+  ],
+  "keys": [
+   "inv",
+   "designation",
+   "ext",
+   "signature",
+   "sheets",
+   "copies"
+  ],
+  "top1": 121.8,
+  "topA": 41.6
+ }
+}

@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Описи документов в архив</title>
 <script src="https://db.mp-lab.ru/grist-plugin-api.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -244,7 +246,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.4.0</footer>
+<footer class="ver-footer">v0.5.0</footer>
 
 <script>
 'use strict';
@@ -423,6 +425,7 @@ function loadRefData() {
         inv: ib.InventoryNumber ? String(ib.InventoryNumber[i] || '') : '',
         sheets: ib.Sheets ? ib.Sheets[i] : null,
         version: ib.ChangeNumber ? ib.ChangeNumber[i] : null,
+        product: ib.Product ? ib.Product[i] : 0,
         name: ib.Name ? String(ib.Name[i] || '') : ''
       };
     });
@@ -1418,16 +1421,289 @@ function recordView(r) {
   };
 }
 
-// Бланк описи ещё не утверждён — кнопка есть в каждой строке (одна опись —
-// один PDF), но пока неактивна. Генерация будет как в notification_numbers:
-// pdf-lib + шаблон + times-cp1251.ttf.
+// ---------- PDF описи (бланки opis_copies_* / opis_edocs_*) ----------
+//
+// Шаблоны, opis_layout.json и шрифты лежат в корне репозитория рядом с
+// index.html — пути относительные, как в notification_numbers.
+// paginate()/buildOpisPart() перенесены из эталона example_fill_pdf-lib.js:
+// строк столько, сколько данных; «Составил/Получил» сразу под таблицей;
+// не влезло — продолжение на листе 1a «Опись № … Лист N».
+// Одна опись — один PDF: сначала опись копий (извещения), затем опись
+// электронных документов (купленные документы). Каждая часть — со своей
+// нумерацией листов и своими подписями, как на скане «Опись 13-2025.pdf».
+var OPIS_ASSETS = ['opis_layout.json', 'times-cp1251.ttf', 'timesbd-cp1251.ttf',
+  'opis_copies_1.pdf', 'opis_copies_1a.pdf', 'opis_edocs_1.pdf', 'opis_edocs_1a.pdf'];
+var opisAssetsPromise = null;
+
+function loadOpisAssets() {
+  if (!opisAssetsPromise) {
+    opisAssetsPromise = Promise.all(OPIS_ASSETS.map(function (f) {
+      return fetch(f).then(function (r) {
+        if (!r.ok) throw new Error('Не удалось загрузить ' + f + ' (' + r.status + ')');
+        return f.slice(-5) === '.json' ? r.json() : r.arrayBuffer();
+      });
+    })).then(function (parts) {
+      var a = {};
+      OPIS_ASSETS.forEach(function (f, i) { a[f] = parts[i]; });
+      return a;
+    });
+    opisAssetsPromise.catch(function () { opisAssetsPromise = null; });
+  }
+  return opisAssetsPromise;
+}
+
+// Раскладка строк по листам. Последний лист должен вместить подписи; иначе хвост уезжает на новый лист.
+// Строка-группа (название изделия) не остаётся последней на листе — уходит вместе со своими документами.
+function opisPaginate(L, rows, lay) {
+  var cap = function (top) { return Math.floor((L.bottom - top) / L.row + 1e-6); };
+  var signRows = Math.ceil((L.sign.gap + 2 * L.sign.line) / L.row);
+  var pages = [];
+  var i = 0;
+  while (true) {
+    var top = pages.length ? lay.topA : lay.top1;
+    var left = rows.length - i;
+    if (left + signRows <= cap(top)) { pages.push(rows.slice(i)); break; }
+    var n = Math.min(cap(top), left);
+    if (n === left) n = left - 1;
+    while (n > 1 && rows[i + n - 1].group) n--;
+    pages.push(rows.slice(i, i + n));
+    i += n;
+  }
+  return pages;
+}
+
+// kind: 'copies' | 'edocs'; data.rows: [{group: 'Изделие'} | {inv, designation, ext, signature, sheets, copies}]
+function buildOpisPart(kind, data, A) {
+  var PDFLib = window.PDFLib, PDFName = PDFLib.PDFName, rgb = PDFLib.rgb;
+  var L = A['opis_layout.json'];
+  var lay = L[kind];
+  return Promise.all([
+    PDFLib.PDFDocument.load(A['opis_' + kind + '_1.pdf']),
+    PDFLib.PDFDocument.load(A['opis_' + kind + '_1a.pdf'])
+  ]).then(function (docs) {
+    var pdf = docs[0], tplA = docs[1];
+    pdf.registerFontkit(window.fontkit);
+    return Promise.all([
+      pdf.embedFont(A['times-cp1251.ttf'], { subset: false }),
+      pdf.embedFont(A['timesbd-cp1251.ttf'], { subset: false })
+    ]).then(function (fonts) {
+      var font = fonts[0], bold = fonts[1];
+      var form = pdf.getForm();
+      var mm = function (v) { return v * L.mm; };
+      var sheets = opisPaginate(L, data.rows, lay);
+      var total = sheets.length;
+
+      // листы продолжения: поля шаблона 1a переносим с префиксом L{s}_
+      var tplFields = tplA.getForm().getFields().map(function (f) {
+        var q = f.acroField.dict.get(PDFName.of('Q'));
+        return { name: f.getName(), rect: f.acroField.getWidgets()[0].getRectangle(),
+                 da: f.acroField.getDefaultAppearance() || '', q: q ? q.asNumber() : 0 };
+      });
+      var chain = Promise.resolve();
+      for (var s = 2; s <= total; s++) {
+        (function (s) {
+          chain = chain.then(function () { return pdf.copyPages(tplA, [0]); }).then(function (pages) {
+            var page = pages[0];
+            page.node.delete(PDFName.of('Annots'));
+            pdf.addPage(page);
+            tplFields.forEach(function (t) {
+              var f = form.createTextField('L' + s + '_' + t.name);
+              f.addToPage(page, Object.assign({}, t.rect, { borderWidth: 0, borderColor: undefined, backgroundColor: undefined, font: font }));
+              f.acroField.setDefaultAppearance(t.da);
+              f.acroField.dict.set(PDFName.of('Q'), pdf.context.obj(t.q));
+            });
+          });
+        })(s);
+      }
+      return chain.then(function () {
+        var set = function (n, v) { if (v == null || v === '') return; try { form.getTextField(n).setText(String(v)); } catch (e) {} };
+        var pre = function (s) { return s === 1 ? '' : 'L' + s + '_'; };
+
+        // поле поверх ячейки (x, y — левый верх, мм); align: 0 влево, 1 по центру
+        var addField = function (page, name, x, y, w, h, value, size, align) {
+          if (size == null) size = L.fontSize;
+          if (align == null) align = 1;
+          var f = form.createTextField(name);
+          f.addToPage(page, { x: mm(x + 0.4), y: page.getHeight() - mm(y + h - 0.3), width: mm(w - 0.8), height: mm(h - 0.6),
+                              borderWidth: 0, borderColor: undefined, backgroundColor: undefined, font: font });
+          f.acroField.setDefaultAppearance('/TiNR ' + size + ' Tf 0 g');
+          f.acroField.dict.set(PDFName.of('Q'), pdf.context.obj(align));
+          if (value != null && value !== '') f.setText(String(value));
+        };
+        var line = function (page, x1, y1, x2, y2) {
+          page.drawLine({ start: { x: mm(x1), y: page.getHeight() - mm(y1) }, end: { x: mm(x2), y: page.getHeight() - mm(y2) },
+                          thickness: 0.5, color: rgb(0, 0, 0) });
+        };
+
+        var xs = [L.x0];
+        lay.cols.forEach(function (c) { xs.push(xs[xs.length - 1] + c); });
+        var n = 0;                                            // сквозной номер строки для имён полей r{n}_*
+        sheets.forEach(function (rows, si) {
+          var page = pdf.getPage(si);
+          var y = si ? lay.topA : lay.top1;
+          rows.forEach(function (row) {
+            n++;
+            xs.forEach(function (x) { line(page, x, y, x, y + L.row); });
+            line(page, xs[0], y + L.row, xs[xs.length - 1], y + L.row);
+            lay.keys.forEach(function (k, j) {
+              var v = row.group ? (k === 'designation' ? row.group : '') : row[k];
+              addField(page, 'r' + n + '_' + k, xs[j], y, lay.cols[j], L.row, v, lay.cols[j] > 16 ? L.fontSize : 10);
+            });
+            y += L.row;
+          });
+          if (si === total - 1) {                             // подписи — сразу под таблицей
+            y += L.sign.gap;
+            L.sign.rows.forEach(function (sr, k) {
+              var label = sr[0], who = sr[1];
+              var yy = y + k * L.sign.line, ul = yy + L.sign.underline;
+              page.drawText(label, { x: mm(L.x0), y: page.getHeight() - mm(yy) - L.fontSize * 0.89, size: L.fontSize, font: font });
+              var x1 = L.x0 + font.widthOfTextAtSize('Составил', L.fontSize) / L.mm + 1.5;
+              line(page, x1, ul, L.sign.name_to, ul);
+              line(page, L.sign.sign[0], ul, L.sign.sign[1], ul);
+              line(page, L.sign.date[0], ul, L.sign.date[1], ul);
+              addField(page, who + '_name', x1, yy - 0.6, L.sign.name_to - x1, L.sign.line, data[who + 'Name']);
+              addField(page, who + '_date', L.sign.date[0], yy - 0.6, L.sign.date[1] - L.sign.date[0], L.sign.line, data[who + 'Date']);
+            });
+          }
+        });
+
+        ['docType', 'company', 'product', 'address', 'topic', 'phone',
+         'volumeProduct', 'volumeId', 'volumes', 'owner', 'sizeMb'].forEach(function (k) { set(k, data[k]); });
+        set('sheets', total);
+        for (var s = 1; s <= total; s++) { set(pre(s) + 'num', data.num); set(pre(s) + 'sheet', s); }
+
+        form.updateFieldAppearances(font);
+        form.getFields().forEach(function (f) { if (/(^|_)num$/.test(f.getName())) f.updateAppearances(bold); });
+        return pdf;
+      });
+    });
+  });
+}
+
+// Изделие строки документа/извещения — верхний узел Components (имя, как в
+// ссылке Product: «ГКВ-10»).
+function opisProductName(pid) {
+  var root = rootComponent(state.componentsById[pid]);
+  return root ? root.name : '';
+}
+
+// rows с заголовками групп по изделию; items: [{product, sortKey, row}]
+function opisGroupRows(items) {
+  var groups = {}, order = [];
+  items.forEach(function (it) {
+    var g = it.product || '';
+    if (!groups[g]) { groups[g] = []; order.push(g); }
+    groups[g].push(it);
+  });
+  order.sort(function (a, b) { return a.localeCompare(b, 'ru', { numeric: true }); });
+  var rows = [];
+  order.forEach(function (g) {
+    if (g) rows.push({ group: g });
+    groups[g].sort(function (a, b) { return String(a.sortKey).localeCompare(String(b.sortKey), 'ru', { numeric: true }); })
+      .forEach(function (it) { rows.push(it.row); });
+  });
+  return rows;
+}
+
+function gatherOpisData(r) {
+  var raw = state.rawById[r.id] || { order: 0, product: 0, notices: [], documents: [] };
+  var copies = opisGroupRows(raw.notices.map(function (id) {
+    var n = state.noticesById[id] || { number: '#' + id, product: '' };
+    return { product: n.product, sortKey: (n.date || 0) + ' ' + n.number,
+             row: { designation: n.number, sheets: 1, copies: 1 } };
+  }));
+  var edocs = opisGroupRows(raw.documents.map(function (id) {
+    var d = state.docsById[id] || { des: '#' + id, inv: '', sheets: null, version: null, product: 0 };
+    return { product: opisProductName(d.product), sortKey: d.inv || d.des,
+             row: { inv: d.inv, designation: d.des, ext: d.version, signature: '', sheets: d.sheets, copies: 1 } };
+  }));
+  var products = [];
+  copies.concat(edocs).forEach(function (row) { if (row.group && products.indexOf(row.group) === -1) products.push(row.group); });
+  if (!products.length && raw.product) { var pn = opisProductName(raw.product); if (pn) products.push(pn); }
+  products.sort(function (a, b) { return a.localeCompare(b, 'ru', { numeric: true }); });
+  var year = dateToYear(r.IssueDate) || '';
+  var product = products.join(' / ');
+  return {
+    num: (r.Number != null ? r.Number : '') + (year ? '-' + year : ''),
+    docType: 'КД',
+    company: r.Destination || '',
+    address: firmAddress(r.Destination) || r.Address || '',
+    product: product,
+    volumeProduct: product,
+    volumes: 1,
+    owner: 'ООО «ЛМП»',
+    compiledDate: r.IssueDate ? formatDate(r.IssueDate) : '',
+    copies: copies,
+    edocs: edocs
+  };
+}
+
+function buildOpisPdfBytes(data, A) {
+  var parts = [];
+  if (data.copies.length) parts.push(['copies', data.copies]);
+  if (data.edocs.length) parts.push(['edocs', data.edocs]);
+  if (!parts.length) return Promise.reject(new Error('В описи нет ни извещений, ни документов — нечего выгружать.'));
+  return Promise.all(parts.map(function (p) {
+    return buildOpisPart(p[0], Object.assign({}, data, { rows: p[1] }), A);
+  })).then(function (pdfs) {
+    var PDFLib = window.PDFLib;
+    if (pdfs.length === 1) {
+      pdfs[0].catalog.getOrCreateAcroForm().dict.set(PDFLib.PDFName.of('NeedAppearances'), PDFLib.PDFBool.False);
+      return pdfs[0].save();
+    }
+    // Две части с одинаковыми именами полей шаблона (num, company, …) в одну
+    // AcroForm не сливаются — поля «запекаем» в содержимое и склеиваем листы.
+    return PDFLib.PDFDocument.create().then(function (out) {
+      var chain = Promise.resolve();
+      pdfs.forEach(function (p) {
+        chain = chain.then(function () {
+          p.getForm().flatten();
+          return out.copyPages(p, p.getPageIndices());
+        }).then(function (pages) { pages.forEach(function (pg) { out.addPage(pg); }); });
+      });
+      return chain.then(function () { return out.save(); });
+    });
+  });
+}
+
+function downloadBytes(bytes, filename) {
+  var blob = new Blob([bytes], { type: 'application/pdf' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+}
+
+function opisFileName(r) {
+  var year = dateToYear(r.IssueDate) || '';
+  return 'Опись ' + (r.Number != null ? r.Number : r.id) + (year ? '-' + year : '') + '.pdf';
+}
+
+function generateOpisPdf(r, btn) {
+  btn.disabled = true; btn.title = 'Генерация…';
+  loadOpisAssets().then(function (A) {
+    return buildOpisPdfBytes(gatherOpisData(r), A);
+  }).then(function (bytes) {
+    downloadBytes(bytes, opisFileName(r));
+  }).catch(function (err) {
+    showError(err);
+  }).then(function () {
+    btn.disabled = false; btn.title = 'Скачать опись (PDF)';
+  });
+}
+
+// Одна опись — один PDF.
 function buildDownloadCell(r) {
   var td = document.createElement('td');
   td.className = 'reg-dl';
   var wrap = document.createElement('div');
   wrap.className = 'reg-dl-wrap';
-  var btn = iconButton('dl-btn', pdfSvg(), 'Бланк описи ещё не подключён');
-  btn.disabled = true;
+  var raw = state.rawById[r.id];
+  var has = raw && (raw.notices.length || raw.documents.length);
+  var btn = iconButton('dl-btn', pdfSvg(), has ? 'Скачать опись (PDF)' : 'В описи нет извещений и документов');
+  btn.disabled = !has;
+  btn.addEventListener('click', function () { generateOpisPdf(r, btn); });
   wrap.appendChild(btn);
   td.appendChild(wrap);
   return td;
