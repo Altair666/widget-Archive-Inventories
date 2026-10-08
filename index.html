@@ -256,7 +256,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.8.0</footer>
+<footer class="ver-footer">v0.9.0</footer>
 
 <script>
 'use strict';
@@ -1790,22 +1790,34 @@ function buildOpisPdfBytes(data, A) {
   return Promise.all(parts.map(function (p) {
     return buildOpisPart(p[0], Object.assign({}, data, { rows: p[1] }), A);
   })).then(function (pdfs) {
-    var PDFLib = window.PDFLib;
-    if (pdfs.length === 1) {
-      pdfs[0].catalog.getOrCreateAcroForm().dict.set(PDFLib.PDFName.of('NeedAppearances'), PDFLib.PDFBool.False);
-      return pdfs[0].save();
-    }
-    // Две части с одинаковыми именами полей шаблона (num, company, …) в одну
-    // AcroForm не сливаются — поля «запекаем» в содержимое и склеиваем листы.
-    return PDFLib.PDFDocument.create().then(function (out) {
-      var chain = Promise.resolve();
-      pdfs.forEach(function (p) {
-        chain = chain.then(function () {
-          p.getForm().flatten();
-          return out.copyPages(p, p.getPageIndices());
-        }).then(function (pages) { pages.forEach(function (pg) { out.addPage(pg); }); });
+    var PDFLib = window.PDFLib, PDFName = PDFLib.PDFName, PDFRef = PDFLib.PDFRef;
+    var out = pdfs[0];
+    out.catalog.getOrCreateAcroForm().dict.set(PDFName.of('NeedAppearances'), PDFLib.PDFBool.False);
+    if (pdfs.length === 1) return out.save();
+    // Склейка без «запекания»: у полей второй части те же имена шаблона
+    // (num, company, r1_…), поэтому переименовываем их с префиксом E_, копируем
+    // листы вместе с виджетами и регистрируем скопированные поля в AcroForm
+    // первой части — все поля остаются редактируемыми.
+    var second = pdfs[1];
+    second.getForm().getFields().forEach(function (f) { f.acroField.setPartialName('E_' + f.getName()); });
+    return out.copyPages(second, second.getPageIndices()).then(function (pages) {
+      var acro = out.getForm().acroForm, seen = {};
+      pages.forEach(function (pg) {
+        out.addPage(pg);
+        var annots = pg.node.Annots();
+        if (!annots) return;
+        for (var k = 0; k < annots.size(); k++) {
+          var ref = annots.get(k);
+          var annot = out.context.lookup(ref);
+          if (!annot || !annot.get || String(annot.get(PDFName.of('Subtype'))) !== '/Widget') continue;
+          var parent = annot.get(PDFName.of('Parent'));
+          var fieldRef = parent instanceof PDFRef ? parent : ref;
+          if (seen[fieldRef.toString()]) continue;
+          seen[fieldRef.toString()] = true;
+          acro.addField(fieldRef);
+        }
       });
-      return chain.then(function () { return out.save(); });
+      return out.save();
     });
   });
 }
