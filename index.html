@@ -271,7 +271,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.12.0</footer>
+<footer class="ver-footer">v0.13.0</footer>
 
 <script>
 'use strict';
@@ -1393,10 +1393,12 @@ var regFilterInput = document.getElementById('regFilterInput');
 function renderRegistry() {
   regCount.textContent = state.records.length;
   var q = (regFilterInput.value || '').trim().toLowerCase();
+  // Год, внутри года — № (порядок регистрации). Не по дате: в старых описях
+  // из xlsx даты идут не по порядку номеров (2022: №8 от 24.10, №9 от 20.10).
   var rows = state.records.slice().sort(function (a, b) {
-    var diff = (b.IssueDate || 0) - (a.IssueDate || 0);
-    if (diff) return diff;
-    return (parseInt(b.Number, 10) || 0) - (parseInt(a.Number, 10) || 0);
+    return (dateToYear(b.IssueDate) || 0) - (dateToYear(a.IssueDate) || 0) ||
+      (parseInt(b.Number, 10) || 0) - (parseInt(a.Number, 10) || 0) ||
+      b.id - a.id;
   });
   if (state.regYearFilter != null) {
     rows = rows.filter(function (r) { return dateToYear(r.IssueDate) === state.regYearFilter; });
