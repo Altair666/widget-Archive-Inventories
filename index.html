@@ -160,6 +160,10 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .reg-left{text-align:left!important;word-break:break-word;overflow-wrap:anywhere}
 
 /* ── Столбец скачивания PDF (как в notification_numbers) ── */
+.reg-sort-btn{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:none;border-radius:3px;background:transparent;color:var(--tx3);cursor:pointer;padding:0;flex-shrink:0;opacity:.45;transition:all .1s}
+.reg-sort-btn.on{opacity:1;color:var(--grn)}
+.reg-sort-btn:hover{background:var(--grn-bg);color:var(--grn);opacity:1}
+.reg-th-sort{display:inline-flex;align-items:center;gap:4px}
 .reg-dl,.reg-dl-head{white-space:nowrap;text-align:center!important;padding-left:0!important;padding-right:0!important}
 .reg-dl-head{color:var(--red-br)}
 .reg-dl-head svg{display:block;margin:0 auto}
@@ -271,7 +275,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.13.0</footer>
+<footer class="ver-footer">v0.14.0</footer>
 
 <script>
 'use strict';
@@ -320,6 +324,7 @@ var state = {
   rawById: {},          // id описи -> {dest, date, order, products, notices, documents} (числовые id)
   refsLoaded: false,
   regYearFilter: null,  // число года или null («Все»)
+  regSort: { key: 'num', dir: 'desc' },  // сортировка реестра: 'num' (год + №) | 'dest' (Куда)
   editingId: null
 };
 
@@ -1390,15 +1395,43 @@ var regBody = document.getElementById('regBody');
 var regCount = document.getElementById('regCount');
 var regFilterInput = document.getElementById('regFilterInput');
 
+// Кнопка сортировки в шапке (как в widget-decimalnumber): нажатие на активную
+// меняет направление, на другую — сортирует по её столбцу.
+function sortHead(label, key) {
+  var on = state.regSort.key === key, desc = !on || state.regSort.dir === 'desc';
+  var title = on
+    ? (desc ? 'Сортировка: убывание (нажмите для возрастания)' : 'Сортировка: возрастание (нажмите для убывания)')
+    : 'Сортировать по этому столбцу';
+  return '<span class="reg-th-sort">' + label +
+    '<button class="reg-sort-btn' + (on ? ' on' : '') + '" type="button" data-sort="' + key + '" title="' + title + '">' +
+    (desc ? '<svg width="10" height="12" viewBox="0 0 10 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 1v10M1 7l4 4 4-4"/></svg>'
+          : '<svg width="10" height="12" viewBox="0 0 10 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 11V1M1 5l4-4 4 4"/></svg>') +
+    '</button></span>';
+}
+
+function toggleRegSort(key) {
+  if (state.regSort.key === key) state.regSort.dir = state.regSort.dir === 'desc' ? 'asc' : 'desc';
+  else state.regSort = { key: key, dir: key === 'dest' ? 'asc' : 'desc' };
+  renderRegistry();
+}
+
 function renderRegistry() {
   regCount.textContent = state.records.length;
   var q = (regFilterInput.value || '').trim().toLowerCase();
-  // Год, внутри года — № (порядок регистрации). Не по дате: в старых описях
-  // из xlsx даты идут не по порядку номеров (2022: №8 от 24.10, №9 от 20.10).
+  // «№» — год, внутри года — № (порядок регистрации). Не по дате: в старых
+  // описях из xlsx даты идут не по порядку номеров (2022: №8 от 24.10, №9 от
+  // 20.10). «Куда» — по алфавиту, внутри фирмы новые описи сверху.
+  var srt = state.regSort, sign = srt.dir === 'asc' ? 1 : -1;
+  function byNum(a, b) {
+    return (dateToYear(a.IssueDate) || 0) - (dateToYear(b.IssueDate) || 0) ||
+      (parseInt(a.Number, 10) || 0) - (parseInt(b.Number, 10) || 0) ||
+      a.id - b.id;
+  }
   var rows = state.records.slice().sort(function (a, b) {
-    return (dateToYear(b.IssueDate) || 0) - (dateToYear(a.IssueDate) || 0) ||
-      (parseInt(b.Number, 10) || 0) - (parseInt(a.Number, 10) || 0) ||
-      b.id - a.id;
+    if (srt.key === 'dest') {
+      return sign * String(a.Destination || '').localeCompare(String(b.Destination || ''), 'ru') || -byNum(a, b);
+    }
+    return sign * byNum(a, b);
   });
   if (state.regYearFilter != null) {
     rows = rows.filter(function (r) { return dateToYear(r.IssueDate) === state.regYearFilter; });
@@ -1422,12 +1455,15 @@ function renderRegistry() {
   var table = document.createElement('table');
   table.className = 'reg-table';
   table.innerHTML =
-    '<colgroup><col style="width:30px"><col style="width:44px"><col style="width:124px"><col style="width:21%"><col style="width:7%"><col style="width:12%"><col style="width:8%"><col style="width:9%"><col><col style="width:30px"></colgroup>' +
-    '<thead><tr><th class="reg-dl-head" title="Скачать опись (PDF)">' + downloadSvg() + '</th><th>№</th><th>Дата</th><th style="text-align:left">Куда</th>' +
+    '<colgroup><col style="width:30px"><col style="width:52px"><col style="width:124px"><col style="width:21%"><col style="width:7%"><col style="width:12%"><col style="width:8%"><col style="width:9%"><col><col style="width:30px"></colgroup>' +
+    '<thead><tr><th class="reg-dl-head" title="Скачать опись (PDF)">' + downloadSvg() + '</th><th>' + sortHead('№', 'num') + '</th><th>Дата</th><th style="text-align:left">' + sortHead('Куда', 'dest') + '</th>' +
     '<th style="text-align:left">Изделие</th><th style="text-align:left">Обозначение</th><th style="text-align:left">Заказ</th>' +
     '<th style="text-align:left">Извещения</th>' +
     '<th style="text-align:left">Документы</th><th class="reg-dl-head reg-ed-head" title="Редактировать строку">' + pencilSvg() + '</th></tr></thead><tbody></tbody>';
   var tbody = table.querySelector('tbody');
+  Array.prototype.forEach.call(table.querySelectorAll('.reg-sort-btn'), function (b) {
+    b.addEventListener('click', function () { toggleRegSort(b.getAttribute('data-sort')); });
+  });
 
   rows.forEach(function (r) {
     var tr = document.createElement('tr');
