@@ -275,7 +275,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.14.0</footer>
+<footer class="ver-footer">v0.15.0</footer>
 
 <script>
 'use strict';
@@ -293,7 +293,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 // документов: купленные документы этих изделий в последней версии на дату
 // описи минус то, что фирма уже получила (см. «План описи»). Извещения описи —
 // извещения отмеченных документов. Пишем Order:Ref, Products:RefList,
-// Notices:RefList, Documents:RefList; старая колонка Product только читается.
+// Notices:RefList, Documents:RefList.
 // У этих Ref-колонок настроен displayCol, поэтому onRecords отдаёт в них
 // ТЕКСТ, а не id — настоящие id читаем отдельно через fetchTable своей таблицы
 // (state.rawById), см. refreshRawRefs.
@@ -533,10 +533,8 @@ function loadRefData() {
 
     var raw = {};
     (own.id || []).forEach(function (id, i) {
-      // Products (RefList) — изделия описи; старая колонка Product — запасной
-      // вариант для записей, где Products ещё пуст.
+      // Products (RefList) — изделия описи.
       var products = own.Products ? decodeList(own.Products[i]) : [];
-      if (!products.length && own.Product && typeof own.Product[i] === 'number' && own.Product[i] > 0) products = [own.Product[i]];
       raw[id] = {
         dest: own.Destination ? normFirm(own.Destination[i]) : '',
         date: own.IssueDate ? own.IssueDate[i] : null,
