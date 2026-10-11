@@ -278,7 +278,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.17.0</footer>
+<footer class="ver-footer">v0.18.0</footer>
 
 <script>
 'use strict';
@@ -457,12 +457,22 @@ function loadRefData() {
     // Каждая версия документа — отдельная строка Inventory_book с тем же
     // обозначением и своим ChangeNumber. root — основное изделие (верх цепочки
     // primary_use), у строк без Product — по децимальному номеру обозначения.
-    var docs = {}, byKey = {};
+    // Отдельный документ без изделия (RU.ЛМАП.502900-01 34 01) — «текстовое»
+    // изделие: название из книги до первой точки, root = '~' + название.
+    var docs = {}, byKey = {}, loose = {};
     (ib.id || []).forEach(function (id, i) {
       var des = ib.DocumentDesignation ? String(ib.DocumentDesignation[i] || '') : '';
       var pid = ib.Product ? ib.Product[i] : 0;
       var root = rootComponent(comps[pid]);
       if (!root) { var dn0 = extractDns(des)[0]; root = dn0 && byDn[dn0] ? rootComponent(byDn[dn0]) : null; }
+      var name = ib.Name ? String(ib.Name[i] || '') : '';
+      var looseId = '';
+      if (!root && des.trim()) {
+        var label = name.split('. ')[0].trim() || des.trim();
+        looseId = '~' + label;
+        var lp = loose[looseId] = loose[looseId] || { id: looseId, name: label, dn: '', dns: [] };
+        if (lp.dns.indexOf(des.trim()) === -1) { lp.dns.push(des.trim()); lp.dn = lp.dns.join(', '); }
+      }
       var d = docs[id] = {
         id: id,
         des: des,
@@ -472,21 +482,36 @@ function loadRefData() {
         version: ib.ChangeNumber ? ib.ChangeNumber[i] : null,
         date: ib.IssueDate ? ib.IssueDate[i] : null,
         product: pid,
-        root: root ? root.id : 0,
+        root: root ? root.id : looseId,
         signature: ib.Signature ? String(ib.Signature[i] || '').trim() : '',
-        name: ib.Name ? String(ib.Name[i] || '') : ''
+        name: name
       };
       if (!d.key) return;
       (byKey[d.key] = byKey[d.key] || []).push(d);
     });
     state.docsById = docs;
     state.docsByKey = byKey;
+    state.looseProducts = loose;
 
+    // Обозначения книги для поиска в doc_filtered с хвостом-описанием:
+    // «RU.ЛМАП.502900-01 34 01 Руководство для оператора…» → RU.ЛМАП.502900-01 34 01.
+    var desList = Object.keys(byKey).map(function (k) {
+      return { key: k, des: byKey[k][0].des.replace(/\s+/g, ' ').trim().toUpperCase() };
+    }).sort(function (a, b) { return b.des.length - a.des.length; });
     var orders = [];
     (ot.id || []).forEach(function (id, i) {
       var docText = ot.doc_filtered ? String(ot.doc_filtered[i] || '') : '';
       var bought = {};
-      docText.split(';').forEach(function (p) { var k = normDes(p); if (k) bought[k] = true; });
+      docText.split(';').forEach(function (p) {
+        var k = normDes(p);
+        if (!k) return;
+        bought[k] = true;
+        if (byKey[k]) return;
+        var t = p.replace(/\s+/g, ' ').trim().toUpperCase() + ' ';
+        for (var j = 0; j < desList.length; j++) {
+          if (t.indexOf(desList[j].des + ' ') === 0) { bought[desList[j].key] = true; break; }
+        }
+      });
       orders.push({
         id: id,
         client: normFirm(ot.client ? ot.client[i] : ''),
@@ -585,15 +610,37 @@ function ordersForFirm(firm, keepId) {
 // новые документы. Последняя версия выше 0 без извещения — «нужно
 // извещение», опись с таким документом не регистрируется.
 
-// Основные изделия заказа (по децимальным номерам из doc_filtered).
-function productsForOrder(order) {
-  if (!order) return [];
+// Изделие по id: число — компонент, '~название' — отдельный документ без
+// изделия, изделие записано в инвентарной книге текстом.
+function productById(id) {
+  return typeof id === 'number' ? state.componentsById[id] : (state.looseProducts || {})[id];
+}
+function productName(id) { var p = productById(id); return p ? p.name : ''; }
+
+// Корневые изделия по децимальным номерам doc_filtered (нужны для «КД»).
+function dnRoots(order) {
   var out = [];
   order.dns.forEach(function (dn) {
     var c = rootComponent(state.componentByDn[dn]);
-    if (c && out.indexOf(c) === -1) out.push(c);
+    if (c && out.indexOf(c.id) === -1) out.push(c.id);
   });
-  return out.sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
+  return out;
+}
+
+// Изделия заказа: купленные документы из doc_filtered ищем в инвентарной
+// книге по обозначению и берём их корневое изделие (ЛМАП.402131.018ТУ →
+// ГКВ-11), а у отдельных документов — текстовое изделие из книги
+// (RU.ЛМАП.502900-01 34 01 → «Демонстрационное ПО QInertsys»).
+function productsForOrder(order) {
+  if (!order) return [];
+  var ids = dnRoots(order);
+  orderDocKeys(order).forEach(function (k) {
+    (state.docsByKey[k] || []).forEach(function (d) {
+      if (d.root && ids.indexOf(d.root) === -1) ids.push(d.root);
+    });
+  });
+  return ids.map(productById).filter(Boolean)
+    .sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
 }
 
 // Нормализованные обозначения, купленные по заказу («КД» — все документы
@@ -601,7 +648,7 @@ function productsForOrder(order) {
 function orderDocKeys(order) {
   if (!order) return [];
   var roots = {};
-  if (order.allKd) productsForOrder(order).forEach(function (c) { roots[c.id] = true; });
+  if (order.allKd) dnRoots(order).forEach(function (id) { roots[id] = true; });
   return Object.keys(state.docsByKey).filter(function (k) {
     if (order.bought[k]) return true;
     return order.allKd && state.docsByKey[k].some(function (d) { return roots[d.root]; });
@@ -679,9 +726,8 @@ function buildPlan(order, productIds, firm, asOf, exceptId) {
     }
     items.push(it);
   });
-  var rootName = function (id) { var c = state.componentsById[id]; return c ? c.name : ''; };
   return items.sort(function (a, b) {
-    return rootName(a.root).localeCompare(rootName(b.root), 'ru') ||
+    return productName(a.root).localeCompare(productName(b.root), 'ru') ||
       String(a.doc.inv || a.doc.des).localeCompare(String(b.doc.inv || b.doc.des), 'ru', { numeric: true });
   });
 }
@@ -726,6 +772,12 @@ function createCascade(opts) {
   var asOf = opts.asOf != null ? opts.asOf : null;
   var keepOrderId = init.order || 0;
   var cur = { order: init.order || 0, products: (init.products || []).slice() };
+  // Текстовые изделия в Products (RefList:Components) не хранятся — берём
+  // их из документов сохранённой описи.
+  (init.documents || []).forEach(function (id) {
+    var d = state.docsById[id];
+    if (d && typeof d.root === 'string' && d.root && cur.products.indexOf(d.root) === -1) cur.products.push(d.root);
+  });
   var autoProducts = !cur.products.length;
   var explicit = edit;
   var picks = {};
@@ -888,9 +940,8 @@ function createCascade(opts) {
     // Внутри изделия — по извещению (дата первого, номер), без извещения — в конце.
     function nkey(it) { return it.notices.join(','); }
     function nfirst(it) { return state.noticesById[it.notices[0]] || null; }
-    var rootName = function (id) { var c = state.componentsById[id]; return c ? c.name : ''; };
     rows.sort(function (a, b) {
-      var r = rootName(a.root).localeCompare(rootName(b.root), 'ru');
+      var r = productName(a.root).localeCompare(productName(b.root), 'ru');
       if (r) return r;
       var na = nfirst(a), nb = nfirst(b);
       if (!na !== !nb) return na ? -1 : 1;
@@ -917,7 +968,7 @@ function createCascade(opts) {
         var gtd = body.insertRow().insertCell();
         gtd.colSpan = small ? 1 : 2;
         gtd.className = 'plan-group';
-        gtd.textContent = (state.componentsById[it.root] || {}).name || 'Без изделия';
+        gtd.textContent = productName(it.root) || 'Без изделия';
       }
       var on = isOn(it);
       var tr = body.insertRow();
@@ -1322,6 +1373,9 @@ syncLockBtn();
 
 var btnRegister = document.getElementById('btnRegister');
 var registering = false;
+// Products — RefList:Components: текстовые изделия ('~…') не пишем.
+function componentIds(ids) { return ids.filter(function (id) { return typeof id === 'number'; }); }
+
 // Почему опись нельзя зарегистрировать ('' — можно).
 function registerBlocker() {
   var c = formCascade.getValue();
@@ -1352,7 +1406,7 @@ btnRegister.addEventListener('click', function () {
     IssueDate: inputValueToDate(fDate.value),
     Destination: dest,
     Order: c.order,
-    Products: ['L'].concat(c.products),
+    Products: ['L'].concat(componentIds(c.products)),
     Notices: ['L'].concat(c.notices),
     Documents: ['L'].concat(c.documents)
   };
@@ -1631,7 +1685,7 @@ function editableRow(r) {
       }
       fields.Order = c.order || 0;
       if (c.order) {
-        fields.Products = ['L'].concat(c.products);
+        fields.Products = ['L'].concat(componentIds(c.products));
         fields.Notices = ['L'].concat(c.notices);
         fields.Documents = ['L'].concat(c.documents);
       }
@@ -1656,6 +1710,10 @@ function recordView(r) {
   var raw = state.rawById[r.id];
   var order = raw ? state.ordersById[raw.order] : null;
   var comps = raw ? raw.products.map(function (id) { return state.componentsById[id]; }).filter(Boolean) : [];
+  if (raw) raw.documents.forEach(function (id) {
+    var d = state.docsById[id], lp = d && typeof d.root === 'string' ? productById(d.root) : null;
+    if (lp && comps.indexOf(lp) === -1) comps.push(lp);
+  });
   var notices = raw ? raw.notices.map(function (id) {
     return state.noticesById[id] || { id: id, number: '#' + id };
   }) : [];
