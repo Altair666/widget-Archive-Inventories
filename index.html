@@ -192,6 +192,16 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .reg-table .form-input.formed-num{height:26px;font-size:11px}
 .tag{display:inline-flex;align-items:center;font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:4pt}
 .tag-blue{background:var(--acc-bg);color:var(--acc)}
+/* Свёрток строки реестра (как в виджете извещений): >2 документов */
+.reg-num-toggle{display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none}
+.reg-num-toggle.no-toggle{cursor:default}
+.reg-num-toggle:hover{color:var(--acc)}
+.reg-num-toggle.no-toggle:hover{color:inherit}
+.reg-num-text{user-select:text;-webkit-user-select:text;cursor:text}
+.reg-chevron{display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px;color:var(--tx3);transition:transform .15s;flex-shrink:0}
+.reg-chevron.on{transform:rotate(90deg)}
+.reg-num-toggle:hover .reg-chevron{color:var(--acc)}
+.reg-doc-count{cursor:pointer}
 
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -278,7 +288,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.18.0</footer>
+<footer class="ver-footer">v0.19.0</footer>
 
 <script>
 'use strict';
@@ -327,7 +337,8 @@ var state = {
   rawById: {},          // id описи -> {dest, date, order, products, notices, documents} (числовые id)
   refsLoaded: false,
   regYearFilter: null,  // число года или null («Все»)
-  regSort: { key: 'num', dir: 'desc' },  // сортировка реестра: 'num' (год + №) | 'dest' (Куда)
+  regSort: { key: 'num', dir: 'desc' },
+  expandedIds: {},     // описи с развёрнутым списком документов (>2 — свёрнуты)  // сортировка реестра: 'num' (год + №) | 'dest' (Куда)
   editingId: null
 };
 
@@ -1570,16 +1581,44 @@ function renderRegistry() {
       return;
     }
 
+    var v = recordView(r);
+    // Больше двух документов или извещений — строка свёрнута, как в виджете
+    // извещений.
+    var collapsible = v.docs.length > 2 || v.notices.length > 2;
+    var expanded = !collapsible || !!state.expandedIds[r.id];
+    function toggleRow() {
+      if (state.expandedIds[r.id]) delete state.expandedIds[r.id];
+      else state.expandedIds[r.id] = true;
+      renderRegistry();
+    }
+
     var tdNum = document.createElement('td');
     tdNum.className = 'reg-dn';
-    tdNum.textContent = r.Number != null ? r.Number : '';
+    var toggle = document.createElement('span');
+    toggle.className = 'reg-num-toggle' + (collapsible ? '' : ' no-toggle');
+    toggle.innerHTML = '<span class="reg-chevron' + (collapsible && expanded ? ' on' : '') + '">' +
+      (collapsible ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>' : '') +
+      '</span>';
+    var numText = document.createElement('span');
+    numText.className = 'reg-num-text';
+    numText.textContent = r.Number != null ? r.Number : '';
+    toggle.appendChild(numText);
+    if (collapsible) {
+      toggle.title = expanded ? 'Свернуть' : 'Развернуть';
+      toggle.addEventListener('click', function () {
+        // Выделение номера мышью — не сворачиваем.
+        var sel = window.getSelection();
+        if (sel && sel.toString()) return;
+        toggleRow();
+      });
+    }
+    tdNum.appendChild(toggle);
     tr.appendChild(tdNum);
 
     var tdDate = document.createElement('td');
     tdDate.textContent = formatDate(r.IssueDate);
     tr.appendChild(tdDate);
 
-    var v = recordView(r);
     var tdDest = document.createElement('td');
     tdDest.className = 'reg-dest';
     tdDest.textContent = r.Destination || '';
@@ -1599,7 +1638,15 @@ function renderRegistry() {
     var tdNtc = cell('');
     var ntcWrap = document.createElement('div');
     ntcWrap.className = 'reg-ntc';
-    v.notices.forEach(function (n) {
+    if (!expanded && v.notices.length > 2) {
+      tdNtc.classList.add('reg-doc-count');
+      tdNtc.title = 'Развернуть';
+      var ncnt = document.createElement('span');
+      ncnt.className = 'tag tag-blue';
+      ncnt.textContent = v.notices.length + ' ' + pluralizeRu(v.notices.length, 'извещение', 'извещения', 'извещений');
+      ntcWrap.appendChild(ncnt);
+      tdNtc.addEventListener('click', toggleRow);
+    } else v.notices.forEach(function (n) {
       var t = document.createElement('span');
       t.className = 'tag tag-blue'; t.textContent = n.number;
       t.title = (n.product || '') + (n.date ? ' · ' + formatDate(n.date) : '');
@@ -1608,7 +1655,16 @@ function renderRegistry() {
     tdNtc.appendChild(ntcWrap);
 
     var tdDocs = cell('');
-    v.docs.forEach(function (d) { tdDocs.appendChild(docLineEl(d)); });
+    if (expanded || v.docs.length <= 2) v.docs.forEach(function (d) { tdDocs.appendChild(docLineEl(d)); });
+    else {
+      tdDocs.classList.add('reg-doc-count');
+      tdDocs.title = 'Развернуть';
+      var cnt = document.createElement('span');
+      cnt.className = 'tag tag-blue';
+      cnt.textContent = v.docs.length + ' ' + pluralizeRu(v.docs.length, 'документ', 'документа', 'документов');
+      tdDocs.appendChild(cnt);
+      tdDocs.addEventListener('click', toggleRow);
+    }
 
     var editBtn = iconButton('cell-edit-btn', pencilSvg(), 'Редактировать');
     editBtn.addEventListener('click', function () { state.editingId = r.id; renderRegistry(); });
