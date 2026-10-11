@@ -240,7 +240,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
           </button>
         </div>
       </div>
-      <div class="form-group form-docs">
+      <div class="form-group form-docs" id="fDocsGroup" style="display:none">
         <label class="form-label">Документы</label>
         <div id="fDocsWrap"></div>
       </div>
@@ -278,7 +278,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.16.0</footer>
+<footer class="ver-footer">v0.17.0</footer>
 
 <script>
 'use strict';
@@ -1336,6 +1336,8 @@ function registerBlocker() {
 }
 
 function syncRegisterBtn() {
+  // Таблица документов — только когда выбраны фирма и заказ.
+  document.getElementById('fDocsGroup').style.display = formFirmCombo.getValue() && formCascade.getValue().order ? '' : 'none';
   var why = registerBlocker();
   btnRegister.disabled = registering || !!why;
   btnRegister.title = why;
