@@ -288,7 +288,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.19.0</footer>
+<footer class="ver-footer">v0.20.0</footer>
 
 <script>
 'use strict';
@@ -1499,6 +1499,18 @@ function updateRegYearScrollBtns() {
 // ---------- Registry table (list + inline edit) ----------
 
 var regBody = document.getElementById('regBody');
+
+// «Изделие» и «Обозначение»: 7% и 12% ширины реестра плюс 5 букв (~35px).
+// calc(% + px) в <col> Chromium не понимает — считаем в пикселях и
+// пересчитываем при изменении размера окна.
+function sizeRegCols() {
+  var w = regBody.clientWidth;
+  var p = regBody.querySelector('.reg-col-prod'), d = regBody.querySelector('.reg-col-dn');
+  if (!w || !p || !d) return;
+  p.style.width = Math.round(w * 0.07 + 35) + 'px';
+  d.style.width = Math.round(w * 0.12 + 35) + 'px';
+}
+window.addEventListener('resize', sizeRegCols);
 var regCount = document.getElementById('regCount');
 var regFilterInput = document.getElementById('regFilterInput');
 
@@ -1559,10 +1571,18 @@ function renderRegistry() {
     return;
   }
 
+  // «Документы» — по самой длинной строке документа во всех описях (моно
+  // 10.5px, знак 0.6em) плюс запас на 4 знака и паддинги ячейки; остаток
+  // ширины забирает «Куда». «Изделие» и «Обозначение» — см. sizeRegCols.
+  var maxDocLen = 0;
+  state.records.forEach(function (r) {
+    recordView(r).docs.forEach(function (d) { maxDocLen = Math.max(maxDocLen, docLine(d).length); });
+  });
+  var docsColW = Math.ceil((maxDocLen + 4) * 10.5 * 0.6) + 16;
   var table = document.createElement('table');
   table.className = 'reg-table';
   table.innerHTML =
-    '<colgroup><col style="width:30px"><col style="width:52px"><col style="width:124px"><col style="width:21%"><col style="width:7%"><col style="width:12%"><col style="width:8%"><col style="width:9%"><col><col style="width:30px"></colgroup>' +
+    '<colgroup><col style="width:30px"><col style="width:52px"><col style="width:124px"><col><col class="reg-col-prod"><col class="reg-col-dn"><col style="width:8%"><col style="width:9%"><col style="width:' + docsColW + 'px"><col style="width:30px"></colgroup>' +
     '<thead><tr><th class="reg-dl-head" title="Скачать опись (PDF)">' + downloadSvg() + '</th><th>' + sortHead('№', 'num') + '</th><th>Дата</th><th style="text-align:left">' + sortHead('Куда', 'dest') + '</th>' +
     '<th style="text-align:left">Изделие</th><th style="text-align:left">Обозначение</th><th style="text-align:left">Заказ</th>' +
     '<th style="text-align:left">Извещения</th>' +
@@ -1675,6 +1695,7 @@ function renderRegistry() {
 
   regBody.innerHTML = '';
   regBody.appendChild(table);
+  sizeRegCols();
   // Поле редактирования могло исчезнуть при перерисовке с открытым списком.
   Array.prototype.forEach.call(document.querySelectorAll('body > .firm-dropdown'), function (d) {
     if (d._closeIfOrphan) d._closeIfOrphan();
