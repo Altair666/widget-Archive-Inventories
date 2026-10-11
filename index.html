@@ -147,6 +147,13 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .plan-item.st-need .plan-check{border-color:var(--red)}
 .plan-item.st-need .plan-tag{background:var(--red-bg);color:var(--red)}
 .plan-item.st-actual{opacity:.7}
+.plan-tbl{width:100%;border-collapse:collapse}
+.plan-tbl th{font-size:10px;font-weight:600;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;text-align:left;padding:3px 6px 4px;border-bottom:1px solid var(--brd)}
+.plan-tbl td{padding:0;vertical-align:middle}
+.plan-tbl td.plan-group{padding:6px 6px 3px}
+.plan-tbl td.plan-ntc{width:1%;white-space:nowrap;font-family:var(--mono);font-size:10.5px;color:var(--acc);padding:3px 10px;border-left:1px solid var(--brd);border-bottom:1px solid var(--brd);border-top:1px solid var(--brd)}
+.plan-tbl td.plan-ntc.need{color:var(--red);font-family:inherit;font-weight:600}
+.plan-tbl td.plan-ntc.none{color:var(--tx3)}
 .plan-foot{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:5px 6px 2px;font-size:10.5px;color:var(--tx3);border-top:1px solid var(--brd);margin-top:4px}
 .plan-foot .warn{color:var(--red);font-weight:600}
 .plan-more{color:var(--acc);cursor:pointer;margin-left:auto}
@@ -227,10 +234,6 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
           <div id="fProductWrap"></div>
         </div>
         <div class="form-group">
-          <label class="form-label">Извещения</label>
-          <div id="fNoticesWrap"></div>
-        </div>
-        <div class="form-group">
           <label class="form-label">&nbsp;</label>
           <button class="btn-add" id="btnRegister" type="button" disabled>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Зарегистрировать
@@ -275,7 +278,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
   <div class="conn-dot" id="connDot"></div>
   <span class="conn-lbl" id="connLbl">Ожидание Grist…</span>
 </div>
-<footer class="ver-footer">v0.15.0</footer>
+<footer class="ver-footer">v0.16.0</footer>
 
 <script>
 'use strict';
@@ -292,7 +295,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 // сопоставленные с Components.decimal_number; по умолчанию все) → план
 // документов: купленные документы этих изделий в последней версии на дату
 // описи минус то, что фирма уже получила (см. «План описи»). Извещения описи —
-// извещения отмеченных документов. Пишем Order:Ref, Products:RefList,
+// извещения, в которых лежат отмеченные документы. Пишем Order:Ref, Products:RefList,
 // Notices:RefList, Documents:RefList.
 // У этих Ref-колонок настроен displayCol, поэтому onRecords отдаёт в них
 // ТЕКСТ, а не id — настоящие id читаем отдельно через fetchTable своей таблицы
@@ -615,20 +618,19 @@ function versionAt(key, date) {
   return best;
 }
 
-// Что фирма уже получила: {sent: {обозначение: версия}, notices: {id: true}}.
+// Что фирма уже получила: {обозначение: версия}.
 function firmSentVersions(firm, order, asOf, exceptId) {
   var key = normFirm(firm).toLowerCase();
-  var sent = {}, notices = {};
+  var sent = {};
   function note(k, v) { v = v || 0; if (sent[k] == null || v > sent[k]) sent[k] = v; }
   function noteOrder(o, date) {
     orderDocKeys(o).forEach(function (k) { var d = versionAt(k, date); if (d) note(k, d.version); });
   }
-  if (!key) return { sent: sent, notices: notices };
+  if (!key) return sent;
   Object.keys(state.rawById).forEach(function (rid) {
     var r = state.rawById[rid];
     if (Number(rid) === exceptId || r.dest.toLowerCase() !== key) return;
     if (asOf != null && r.date != null && r.date > asOf) return;
-    r.notices.forEach(function (nid) { notices[nid] = true; });
     if (r.documents.length) {
       r.documents.forEach(function (id) { var d = state.docsById[id]; if (d && d.key) note(d.key, d.version); });
     } else if (state.ordersById[r.order]) {
@@ -641,24 +643,15 @@ function firmSentVersions(firm, order, asOf, exceptId) {
     var closed = o.end != null ? o.end : o.advance;
     if (closed < limit) noteOrder(o, closed);
   });
-  return { sent: sent, notices: notices };
+  return sent;
 }
 
-// Извещения на версии документа после отправленной (sent) до last включительно;
-// документ фирме не отправлялся — извещения, вышедшие с даты аванса заказа.
-function noticesForDoc(key, sent, last, order, taken) {
-  var out = [];
-  (state.docsByKey[key] || []).forEach(function (d) {
-    var v = d.version || 0;
-    if (v > last || (sent != null && v <= sent)) return;
-    (state.noticesByDocId[d.id] || []).forEach(function (nid) {
-      var n = state.noticesById[nid];
-      if (!n || taken[nid] || out.indexOf(nid) !== -1) return;
-      if (sent == null && (order.advance == null || n.date == null || n.date < order.advance)) return;
-      out.push(nid);
-    });
+// Извещения, в которых лежит эта версия документа (по дате выпуска).
+function docNotices(doc) {
+  return (state.noticesByDocId[doc.id] || []).slice().sort(function (a, b) {
+    var na = state.noticesById[a] || {}, nb = state.noticesById[b] || {};
+    return (na.date || 0) - (nb.date || 0) || a - b;
   });
-  return out;
 }
 
 // Строки плана: {doc, root, sent, status, newDoc, notices}.
@@ -667,9 +660,9 @@ function noticesForDoc(key, sent, last, order, taken) {
 // извещения.
 function buildPlan(order, productIds, firm, asOf, exceptId) {
   if (!order) return [];
-  var base = firmSentVersions(firm, order, asOf, exceptId);
+  var sentByKey = firmSentVersions(firm, order, asOf, exceptId);
   var had = {};   // изделия, документы которых фирма уже получала
-  Object.keys(base.sent).forEach(function (k) {
+  Object.keys(sentByKey).forEach(function (k) {
     var d = (state.docsByKey[k] || [])[0];
     if (d) had[d.root] = true;
   });
@@ -677,13 +670,12 @@ function buildPlan(order, productIds, firm, asOf, exceptId) {
   orderDocKeys(order).forEach(function (k) {
     var doc = versionAt(k, asOf);
     if (!doc || productIds.indexOf(doc.root) === -1) return;
-    var last = doc.version || 0, sent = base.sent[k];
-    var it = { doc: doc, root: doc.root, sent: sent, newDoc: false, notices: [] };
+    var last = doc.version || 0, sent = sentByKey[k];
+    var it = { doc: doc, root: doc.root, sent: sent, newDoc: false, notices: docNotices(doc) };
     if (sent != null && sent >= last) it.status = 'actual';
     else {
-      it.status = last > 0 && !(state.noticesByDocId[doc.id] || []).length ? 'need' : (sent == null ? 'new' : 'update');
+      it.status = last > 0 && !it.notices.length ? 'need' : (sent == null ? 'new' : 'update');
       it.newDoc = sent == null && !!had[doc.root];
-      it.notices = noticesForDoc(k, sent, last, order, base.notices);
     }
     items.push(it);
   });
@@ -723,7 +715,8 @@ function docLineEl(d) {
 // документов берутся на эту дату.
 // Документы: в форме по умолчанию отмечено всё, что нужно отправить, ручные
 // правки запоминаются в picks; в строке реестра — ровно сохранённый список.
-// Извещения не выбираются — это извещения отмеченных документов.
+// Извещения не выбираются — это извещения, в которых лежат отмеченные
+// документы (их текущие версии); в форме — второй столбец таблицы документов.
 function createCascade(opts) {
   var small = !!opts.small;
   var edit = opts.recordId != null;
@@ -851,7 +844,7 @@ function createCascade(opts) {
     plan.forEach(function (it) { inPlan[it.doc.id] = true; });
     if (explicit) Object.keys(picks).forEach(function (id) {
       var d = state.docsById[id];
-      if (picks[id] && d && !inPlan[d.id]) plan.push({ doc: d, root: d.root, status: 'kept', notices: [] });
+      if (picks[id] && d && !inPlan[d.id]) plan.push({ doc: d, root: d.root, status: 'kept', notices: docNotices(d) });
     });
 
     var selected = plan.filter(isOn);
@@ -885,17 +878,50 @@ function createCascade(opts) {
     if (!cur.products.length) { hint(docBox, 'Выберите изделие'); return; }
     if (!plan.length) { hint(docBox, 'Нет купленных документов'); return; }
 
-    var hidden = 0, lastRoot = null, multi = cur.products.length > 1 || plan.some(function (it) { return it.root !== plan[0].root; });
-    plan.forEach(function (it) {
-      var on = isOn(it);
-      if (it.status === 'actual' && !on && !showSent) { hidden++; return; }
+    var multi = cur.products.length > 1 || plan.some(function (it) { return it.root !== plan[0].root; });
+    var rows = [], hidden = 0;
+    plan.forEach(function (it, i) {
+      it.order = i;
+      if (it.status === 'actual' && !isOn(it) && !showSent) hidden++;
+      else rows.push(it);
+    });
+    // Внутри изделия — по извещению (дата первого, номер), без извещения — в конце.
+    function nkey(it) { return it.notices.join(','); }
+    function nfirst(it) { return state.noticesById[it.notices[0]] || null; }
+    var rootName = function (id) { var c = state.componentsById[id]; return c ? c.name : ''; };
+    rows.sort(function (a, b) {
+      var r = rootName(a.root).localeCompare(rootName(b.root), 'ru');
+      if (r) return r;
+      var na = nfirst(a), nb = nfirst(b);
+      if (!na !== !nb) return na ? -1 : 1;
+      if (na && nb) {
+        r = (na.date || 0) - (nb.date || 0) || na.number.localeCompare(nb.number, 'ru', { numeric: true }) || nkey(a).localeCompare(nkey(b));
+        if (r) return r;
+      } else if (a.status === 'need' !== (b.status === 'need')) return a.status === 'need' ? 1 : -1;
+      return a.order - b.order;
+    });
+
+    var tbl = document.createElement('table');
+    tbl.className = 'plan-tbl';
+    if (!small) {
+      var head = tbl.createTHead().insertRow();
+      ['Документ', 'Извещение'].forEach(function (t) {
+        var th = document.createElement('th'); th.textContent = t; head.appendChild(th);
+      });
+    }
+    var body = tbl.createTBody();
+    var lastRoot = null, ntcCell = null, ntcKey = null;
+    rows.forEach(function (it) {
       if (multi && it.root !== lastRoot) {
-        lastRoot = it.root;
-        var g = document.createElement('div');
-        g.className = 'plan-group';
-        g.textContent = (state.componentsById[it.root] || {}).name || 'Без изделия';
-        docBox.appendChild(g);
+        lastRoot = it.root; ntcCell = null;
+        var gtd = body.insertRow().insertCell();
+        gtd.colSpan = small ? 1 : 2;
+        gtd.className = 'plan-group';
+        gtd.textContent = (state.componentsById[it.root] || {}).name || 'Без изделия';
       }
+      var on = isOn(it);
+      var tr = body.insertRow();
+      var td = tr.insertCell();
       var row = document.createElement('div');
       row.className = 'plan-item st-' + it.status + (on ? ' on' : '') + (forced(it) ? ' forced' : '');
       row.title = itemTitle(it);
@@ -916,8 +942,25 @@ function createCascade(opts) {
         picks[it.doc.id] = !on; dirty = true;
         render(); changed();
       });
-      docBox.appendChild(row);
+      td.appendChild(row);
+      if (small) return;
+      // Одинаковые извещения подряд — одна объединённая ячейка.
+      var k = it.notices.length ? nkey(it) : (it.status === 'need' ? '!need' : '!none');
+      if (ntcCell && k === ntcKey) { ntcCell.rowSpan++; return; }
+      ntcKey = k;
+      ntcCell = tr.insertCell();
+      ntcCell.className = 'plan-ntc';
+      if (it.notices.length) it.notices.forEach(function (nid) {
+        var n = state.noticesById[nid] || { number: '#' + nid };
+        var d = document.createElement('div');
+        d.textContent = n.number;
+        d.title = (n.product || '') + (n.date ? ' · ' + formatDate(n.date) : '');
+        ntcCell.appendChild(d);
+      });
+      else if (it.status === 'need') { ntcCell.classList.add('need'); ntcCell.textContent = 'нужно извещение'; }
+      else { ntcCell.classList.add('none'); ntcCell.textContent = '—'; }
     });
+    docBox.appendChild(tbl);
 
     var foot = document.createElement('div');
     foot.className = 'plan-foot';
@@ -1243,7 +1286,6 @@ fDate.addEventListener('change', function () {
 var formCascade = createCascade({ asOf: inputValueToDate(fDate.value), onChange: function () { syncRegisterBtn(); } });
 document.getElementById('fOrderWrap').appendChild(formCascade.orderEl);
 document.getElementById('fProductWrap').appendChild(formCascade.productsEl);
-document.getElementById('fNoticesWrap').appendChild(formCascade.noticesEl);
 document.getElementById('fDocsWrap').appendChild(formCascade.docsEl);
 
 var formFirmCombo = createFirmCombo('', false, function (v) { formCascade.setFirm(v); syncRegisterBtn(); });
